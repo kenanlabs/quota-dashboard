@@ -102,6 +102,25 @@
       </div>
 
       <div class="flex items-center space-x-3">
+        <!-- 排序 -->
+        <div class="relative" x-data="{ open: false }">
+          <button @click="open = !open" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm">
+            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/>
+            </svg>
+            <span x-text="sortBy === 'default' ? '排序' : (sortBy === 'usage_5h' ? '5小时' : sortBy === 'usage_7d' ? '7天' : '月')"></span>
+            <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/>
+            </svg>
+          </button>
+          <div x-show="open" @click.away="open = false" class="absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-40" x-cloak>
+            <button @click="sortBy = 'default'; open = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="sortBy === 'default' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">默认顺序</button>
+            <button @click="sortBy = 'usage_5h'; open = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="sortBy === 'usage_5h' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">5小时用量 ↓</button>
+            <button @click="sortBy = 'usage_7d'; open = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="sortBy === 'usage_7d' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">7天用量 ↓</button>
+            <button @click="sortBy = 'usage_monthly'; open = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="sortBy === 'usage_monthly' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">月用量 ↓</button>
+          </div>
+        </div>
+
         <!-- 自动刷新倒计时 -->
         <div class="hidden sm:flex items-center text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
           <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
@@ -126,7 +145,7 @@
             @click="showLoginModal = true"
             class="inline-flex items-center px-3.5 py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm"
           >
-            管理员登录
+            登录
           </button>
         </template>
 
@@ -199,7 +218,7 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
       </svg>
       <h3 class="mt-2 text-sm font-medium text-slate-900">暂无监控的 API Key</h3>
-      <p class="mt-1 text-xs text-slate-500">点击右上角的“管理员登录”添加您的第一个 API Key。</p>
+      <p class="mt-1 text-xs text-slate-500">点击右上角的“登录”添加您的第一个 API Key。</p>
     </div>
 
     <!-- 卡片列表（完全还原截屏外观） -->
@@ -211,7 +230,8 @@
             'opacity-40 border-dashed border-teal-400': draggedIndex === index,
             'border-teal-500 ring-2 ring-teal-200': dragOverIndex === index && draggedIndex !== index,
             'hover:border-slate-300': draggedIndex !== index,
-            'animate-pulse': refreshingKeys[item.id]
+            'animate-pulse': refreshingKeys[item.id],
+            'opacity-50 saturate-0': isAdmin && item.enabled === 0
           }"
           :draggable="isAdmin && !searchQuery.trim()"
           @dragstart="handleDragStart($event, index)"
@@ -324,7 +344,23 @@
 
               <!-- 管理员操作菜单 -->
               <template x-if="isAdmin">
-                <div class="flex items-center space-x-1">
+                <div class="flex items-center space-x-2">
+                  <!-- 自定义 Toggle 开关 -->
+                  <button
+                    @click="toggleKey(item.id)"
+                    type="button"
+                    role="switch"
+                    :aria-checked="!!item.enabled"
+                    class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                    :class="item.enabled ? 'bg-teal-600' : 'bg-slate-300'"
+                    :title="item.enabled ? '已启用 (点击禁用)' : '已禁用 (点击启用)'"
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                      :class="item.enabled ? 'translate-x-4' : 'translate-x-0'"
+                    ></span>
+                  </button>
                   <button @click="openEditModal(item)" class="p-1 text-slate-400 hover:text-indigo-600 rounded">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
@@ -348,7 +384,7 @@
   <!-- 登录 Modal -->
   <div x-show="showLoginModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" x-cloak>
     <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100" @click.away="showLoginModal = false">
-      <h3 class="text-base font-bold text-slate-900 mb-4">管理员登录</h3>
+      <h3 class="text-base font-bold text-slate-900 mb-4">登录</h3>
       <form @submit.prevent="login()">
         <div class="space-y-3">
           <div>
@@ -446,6 +482,28 @@
             <label class="block font-medium text-slate-700 mb-1">团队人数</label>
             <input type="number" x-model.number="keyForm.member_count" min="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
           </div>
+
+          <!-- 启用状态 Custom Switch 开关 -->
+          <template x-if="keyForm.id">
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+              <span class="font-medium text-slate-700">Key 启用状态</span>
+              <button
+                type="button"
+                @click="toggleKey(keyForm.id); keyForm.enabled = keyForm.enabled ? 0 : 1"
+                role="switch"
+                :aria-checked="!!keyForm.enabled"
+                class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                :class="keyForm.enabled ? 'bg-teal-600' : 'bg-slate-300'"
+                :title="keyForm.enabled ? '已启用 (点击禁用)' : '已禁用 (点击启用)'"
+              >
+                <span
+                  aria-hidden="true"
+                  class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                  :class="keyForm.enabled ? 'translate-x-4' : 'translate-x-0'"
+                ></span>
+              </button>
+            </div>
+          </template>
         </div>
 
         <div class="mt-5 flex justify-end space-x-2">
@@ -611,6 +669,7 @@
         countdown: 60,
         timer: null,
         searchQuery: '',
+        sortBy: 'default',
         isAdmin: false,
         adminToken: localStorage.getItem('adminToken') || null,
         draggedIndex: null,
@@ -746,12 +805,31 @@
         async fetchData() {
           this.loading = true;
           try {
-            // 先触发刷新，再获取最新数据
-            await fetch('/api/usage/refresh', { method: 'POST' });
-            const res = await fetch('/api/usage');
-            const json = await res.json();
-            if (json.success) {
-              this.keys = json.data;
+            if (this.isAdmin) {
+              // 管理员获取所有 Key（含已禁用）
+              await fetch('/api/usage/refresh', { method: 'POST' });
+              const [keysRes, usageRes] = await Promise.all([
+                fetch('/api/admin/keys', { headers: { 'Authorization': `Bearer ${this.adminToken}` } }),
+                fetch('/api/usage')
+              ]);
+              const keysJson = await keysRes.json();
+              const usageJson = await usageRes.json();
+              if (keysJson.success && usageJson.success) {
+                // 合并用量数据到所有 Key 中
+                const usageMap = {};
+                usageJson.data.forEach(u => { usageMap[u.id] = u.usage; });
+                this.keys = keysJson.data.map(k => ({
+                  ...k,
+                  usage: usageMap[k.id] || null
+                }));
+              }
+            } else {
+              await fetch('/api/usage/refresh', { method: 'POST' });
+              const res = await fetch('/api/usage');
+              const json = await res.json();
+              if (json.success) {
+                this.keys = json.data;
+              }
             }
           } catch (err) {
             console.error('Fetch error:', err);
@@ -780,6 +858,24 @@
             this.showToast('刷新异常: ' + err.message, 'error');
           } finally {
             this.refreshingKeys = { ...this.refreshingKeys, [id]: false };
+          }
+        },
+
+        async toggleKey(id) {
+          try {
+            const res = await fetch(`/api/admin/keys/${id}/toggle`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${this.adminToken}` }
+            });
+            const json = await res.json();
+            if (json.success) {
+              this.fetchData();
+              this.showToast(json.enabled ? '已启用' : '已禁用');
+            } else {
+              this.showToast(json.error || '操作失败', 'error');
+            }
+          } catch (err) {
+            this.showToast('操作异常: ' + err.message, 'error');
           }
         },
 
@@ -855,14 +951,28 @@
         },
 
         get filteredKeys() {
-          if (!this.searchQuery.trim()) return this.keys;
-          const q = this.searchQuery.toLowerCase();
-          const vf = this.settings.visible_fields || {};
-          return this.keys.filter(k => {
-            const matchName = (vf.display_name !== false) && k.display_name && k.display_name.toLowerCase().includes(q);
-            const matchTeam = (vf.team !== false) && k.team && k.team.toLowerCase().includes(q);
-            const matchOwner = (vf.owner !== false) && k.owner && k.owner.toLowerCase().includes(q);
-            return matchName || matchTeam || matchOwner;
+          let list = this.keys;
+          if (this.searchQuery.trim()) {
+            const q = this.searchQuery.toLowerCase();
+            const vf = this.settings.visible_fields || {};
+            list = this.keys.filter(k => {
+              const matchName = (vf.display_name !== false) && k.display_name && k.display_name.toLowerCase().includes(q);
+              const matchTeam = (vf.team !== false) && k.team && k.team.toLowerCase().includes(q);
+              const matchOwner = (vf.owner !== false) && k.owner && k.owner.toLowerCase().includes(q);
+              return matchName || matchTeam || matchOwner;
+            });
+          }
+          // 排序
+          if (this.sortBy === 'default') return list;
+          const field = this.sortBy;
+          return [...list].sort((a, b) => {
+            const va = a.usage?.[field];
+            const vb = b.usage?.[field];
+            // null 值排到最后
+            if (va == null && vb == null) return 0;
+            if (va == null) return 1;
+            if (vb == null) return -1;
+            return vb - va;
           });
         },
 
@@ -880,6 +990,7 @@
               this.isAdmin = true;
               this.showLoginModal = false;
               this.loginForm = { username: '', password: '' };
+              this.fetchData();
             } else {
               this.showToast(json.error || '登录失败', 'error');
             }
@@ -892,6 +1003,7 @@
           this.adminToken = null;
           this.isAdmin = false;
           localStorage.removeItem('adminToken');
+          this.fetchData();
         },
 
         openAddModal() {

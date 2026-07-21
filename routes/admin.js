@@ -138,6 +138,26 @@ router.put('/keys/reorder', (req, res) => {
 });
 
 /**
+ * PUT /api/admin/keys/:id/toggle
+ * Toggle API Key enabled/disabled status
+ */
+router.put('/keys/:id/toggle', (req, res) => {
+  try {
+    const keyId = req.params.id;
+    const key = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(keyId);
+    if (!key) {
+      return res.status(404).json({ error: 'Key not found' });
+    }
+
+    const newStatus = key.enabled ? 0 : 1;
+    db.prepare('UPDATE api_keys SET enabled = ? WHERE id = ?').run(newStatus, keyId);
+    res.json({ success: true, enabled: !!newStatus });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * PUT /api/admin/keys/:id
  * Update API Key
  */
