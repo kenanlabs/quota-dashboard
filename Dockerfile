@@ -43,10 +43,6 @@ COPY public/ ./public/
 # 创建数据目录
 RUN mkdir -p /app/data
 
-# 复制启动脚本
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:3000/api/usage > /dev/null || exit 1
@@ -54,9 +50,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # 暴露端口
 EXPOSE 3000
 
-# 设置非 root 用户运行
-USER node
-
 # 启动服务
-ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]

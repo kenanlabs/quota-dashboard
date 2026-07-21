@@ -279,13 +279,13 @@ router.put('/password', (req, res) => {
       return res.status(400).json({ error: 'Current and new password are required' });
     }
 
-    const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(req.user.id);
+    const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(req.admin.id);
     if (!admin || !bcrypt.compareSync(current_password, admin.password_hash)) {
       return res.status(400).json({ error: 'Current password is incorrect' });
     }
 
     const newHash = bcrypt.hashSync(new_password, 10);
-    db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(newHash, req.user.id);
+    db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(newHash, req.admin.id);
 
     res.json({ success: true });
   } catch (err) {
