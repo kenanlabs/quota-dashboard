@@ -12,11 +12,17 @@ AI 模型 API Key 用量与配额监控平台。
 │   ├── api.js         # 公开 API（/api/settings, /api/usage, /api/icons）
 │   └── admin.js       # 管理员 API（JWT 保护）
 ├── providers/
-│   ├── index.js       # Provider 路由分发
-│   ├── kimi.js        # Kimi For Coding 用量查询
-│   ├── zhipu.js       # Zhipu GLM 用量查询
-│   ├── minimax.js     # MiniMax 用量查询
-│   └── volcengine.js  # 火山方舟 Agent/Coding Plan 用量查询
+│   ├── index.js        # Provider 路由分发
+│   ├── kimi.js         # Kimi For Coding 用量查询
+│   ├── zhipu.js        # Zhipu GLM 用量查询
+│   ├── minimax.js      # MiniMax 用量查询
+│   ├── volcengine.js   # 火山方舟 Agent/Coding Plan 用量查询
+│   ├── zenmux.js       # ZenMux 用量查询
+│   ├── deepseek.js     # DeepSeek 余额查询
+│   ├── stepfun.js      # StepFun 余额查询
+│   ├── siliconflow.js  # SiliconFlow 余额查询
+│   ├── openrouter.js   # OpenRouter 余额查询
+│   └── novita.js       # Novita AI 余额查询
 ├── middleware/
 │   └── auth.js        # JWT 鉴权中间件
 ├── public/
@@ -58,9 +64,23 @@ docker compose up -d
 
 ## 支持的供应商
 
+### Coding Plan（套餐额度）
+
 | 供应商 | 用量查询方式 | 额度维度 |
 |--------|------------|---------|
 | Kimi For Coding | Bearer API Key | 5h / 周 |
 | Zhipu GLM (智谱) | API Key（无 Bearer 前缀） | 5h / 周 |
+| Zhipu GLM Team (智谱团队) | API Key + Organization ID + Project ID | 5h / 周 |
 | MiniMax | Bearer API Key | 5h / 周 |
 | 火山方舟 (Volcengine) | AK/SK 签名 V4 | 5h / 周 / 月 |
+| ZenMux | Bearer API Key + base_url | 5h / 周 |
+
+### Balance（余额查询）
+
+| 供应商 | 用量查询方式 | 货币 |
+|--------|------------|------|
+| DeepSeek | Bearer API Key | CNY |
+| StepFun | Bearer API Key | CNY |
+| SiliconFlow | Bearer API Key | CNY / USD |
+| OpenRouter | Bearer API Key | USD |
+| Novita AI | Bearer API Key | USD |

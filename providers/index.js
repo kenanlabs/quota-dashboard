@@ -2,13 +2,25 @@ const kimi = require('./kimi');
 const zhipu = require('./zhipu');
 const minimax = require('./minimax');
 const volcengine = require('./volcengine');
+const zenmux = require('./zenmux');
+const deepseek = require('./deepseek');
+const stepfun = require('./stepfun');
+const siliconflow = require('./siliconflow');
+const openrouter = require('./openrouter');
+const novita = require('./novita');
 
 const providers = {
   kimi,
   zhipu,
   zhipu_team: zhipu,
   minimax,
-  volcengine
+  volcengine,
+  zenmux,
+  deepseek,
+  stepfun,
+  siliconflow,
+  openrouter,
+  novita
 };
 
 /**

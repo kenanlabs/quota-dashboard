@@ -52,6 +52,10 @@ function initDb() {
       reset_7d TEXT,
       usage_monthly REAL,
       reset_monthly TEXT,
+      balance_remaining REAL,
+      balance_used REAL,
+      balance_total REAL,
+      balance_unit TEXT,
       raw_response TEXT,
       queried_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE
@@ -62,6 +66,21 @@ function initDb() {
       value TEXT NOT NULL
     );
   `);
+
+  // Migrate existing DB: add balance columns if missing
+  const balanceColumns = [
+    'balance_remaining REAL',
+    'balance_used REAL',
+    'balance_total REAL',
+    'balance_unit TEXT'
+  ];
+  for (const col of balanceColumns) {
+    try {
+      db.exec(`ALTER TABLE usage_snapshots ADD COLUMN ${col}`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
+  }
 
   // Initialize default system settings
   const defaultSettings = {

@@ -340,6 +340,24 @@
                 <span class="text-slate-400 text-[11px] num-tabular" x-show="settings.visible_fields?.reset_time !== false && item.usage?.reset_monthly" x-text="'⏱' + formatResetTime(item.usage?.reset_monthly)"></span>
               </div>
 
+              <!-- 余额显示（余额型 Provider） -->
+              <div class="flex items-center space-x-3" x-show="isBalanceProvider(item.provider) && item.usage && item.usage.balance_remaining != null">
+                <template x-if="item.usage.balance_used != null">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="text-slate-500">已使用:</span>
+                    <span class="font-semibold px-1.5 py-0.5 rounded text-xs num-tabular text-slate-700 bg-slate-100" x-text="formatBalanceValue(item.usage.balance_used, item.usage.balance_unit)"></span>
+                  </div>
+                </template>
+                <div class="flex items-center space-x-1.5">
+                  <span class="text-slate-500">剩余:</span>
+                  <span
+                    class="font-semibold px-1.5 py-0.5 rounded text-xs num-tabular"
+                    :class="item.usage.balance_remaining > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'"
+                    x-text="formatBalanceValue(item.usage.balance_remaining, item.usage.balance_unit)"
+                  ></span>
+                </div>
+              </div>
+
               <!-- 无数据提示 -->
               <div class="text-slate-400 text-xs italic" x-show="!item.usage">
                 暂无用量快照
@@ -430,17 +448,15 @@
             <label class="block font-medium text-slate-700 mb-1">AI 提供商</label>
             <div class="relative" x-data="{ providerOpen: false }">
               <button type="button" @click="providerOpen = !providerOpen" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-left flex items-center justify-between bg-white text-xs">
-                <span x-text="keyForm.provider === 'zhipu' ? 'Zhipu GLM (智谱)' : keyForm.provider === 'zhipu_team' ? 'Zhipu GLM Team (智谱团队)' : keyForm.provider === 'minimax' ? 'MiniMax' : keyForm.provider === 'kimi' ? 'Kimi For Coding' : keyForm.provider === 'volcengine' ? '火山方舟 (Volcengine)' : '请选择'"></span>
+                <span x-text="getProviderLabel(keyForm.provider)"></span>
                 <svg class="w-3.5 h-3.5 text-slate-400 transition-transform" :class="providerOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/>
                 </svg>
               </button>
-              <div x-show="providerOpen" @click.away="providerOpen = false" class="absolute left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50" x-cloak>
-                <button type="button" @click="keyForm.provider = 'zhipu'; providerOpen = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="keyForm.provider === 'zhipu' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">Zhipu GLM (智谱)</button>
-                <button type="button" @click="keyForm.provider = 'zhipu_team'; providerOpen = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="keyForm.provider === 'zhipu_team' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">Zhipu GLM Team (智谱团队)</button>
-                <button type="button" @click="keyForm.provider = 'minimax'; providerOpen = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="keyForm.provider === 'minimax' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">MiniMax</button>
-                <button type="button" @click="keyForm.provider = 'kimi'; providerOpen = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="keyForm.provider === 'kimi' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">Kimi For Coding</button>
-                <button type="button" @click="keyForm.provider = 'volcengine'; providerOpen = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="keyForm.provider === 'volcengine' ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'">火山方舟 (Volcengine)</button>
+              <div x-show="providerOpen" @click.away="providerOpen = false" class="absolute left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 max-h-60 overflow-y-auto" x-cloak>
+                <template x-for="p in PROVIDER_LIST" :key="p.value">
+                  <button type="button" @click="keyForm.provider = p.value; providerOpen = false" class="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50" :class="keyForm.provider === p.value ? 'text-teal-700 font-semibold bg-teal-50' : 'text-slate-600'" x-text="p.label"></button>
+                </template>
               </div>
             </div>
           </div>
@@ -459,6 +475,14 @@
             </label>
             <input type="password" x-model="keyForm.api_key" :placeholder="keyForm.id ? (keyForm.api_key_masked || '当前 Key 已隐藏') : '输入 API Key'" :required="!keyForm.id" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
           </div>
+
+          <!-- ZenMux 需配置 base_url -->
+          <template x-if="keyForm.provider === 'zenmux'">
+            <div class="p-3 bg-violet-50 rounded-lg border border-violet-200">
+              <label class="block font-medium text-slate-700 mb-1 text-[11px]">ZenMux API Endpoint (base URL)</label>
+              <input type="text" x-model="keyForm.base_url" placeholder="https://your-zenmux-endpoint" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs">
+            </div>
+          </template>
 
           <!-- 火山引擎专用配置 -->
           <template x-if="keyForm.provider === 'volcengine'">
@@ -797,6 +821,20 @@
           base_url: '', access_key_id: '', secret_access_key: '',
           organization_id: '', project_id: '', team: '', owner: '', member_count: 0
         },
+
+        PROVIDER_LIST: [
+          { value: 'kimi', label: 'Kimi For Coding' },
+          { value: 'zhipu', label: 'Zhipu GLM (智谱)' },
+          { value: 'zhipu_team', label: 'Zhipu GLM Team (智谱团队)' },
+          { value: 'minimax', label: 'MiniMax' },
+          { value: 'volcengine', label: '火山方舟 (Volcengine)' },
+          { value: 'zenmux', label: 'ZenMux' },
+          { value: 'deepseek', label: 'DeepSeek (余额)' },
+          { value: 'stepfun', label: 'StepFun (余额)' },
+          { value: 'siliconflow', label: 'SiliconFlow (余额)' },
+          { value: 'openrouter', label: 'OpenRouter (余额)' },
+          { value: 'novita', label: 'Novita AI (余额)' }
+        ],
 
         // Settings State
         iconList: [],
@@ -1299,6 +1337,14 @@
             case 'baidu':
             case 'wenxin':
               return '/icons/baidu.svg';
+            case 'stepfun':
+              return '/icons/stepfun.svg';
+            case 'openrouter':
+              return '/icons/openrouter.svg';
+            case 'novita':
+              return '/icons/novita.svg';
+            case 'zenmux':
+              return '/icons/zenmux.svg';
             default:
               return `/icons/${provider}.svg`;
           }
@@ -1327,6 +1373,12 @@
             case 'minimax': return 'MiniMax';
             case 'volcengine': return '方舟';
             case 'kimi': return 'Kimi';
+            case 'zenmux': return 'ZM';
+            case 'deepseek': return 'DS';
+            case 'stepfun': return 'SF';
+            case 'siliconflow': return 'SF';
+            case 'openrouter': return 'OR';
+            case 'novita': return 'NV';
             default: return 'AI';
           }
         },
@@ -1341,6 +1393,21 @@
         formatPercent(val) {
           if (val === null || val === undefined) return '0%';
           return Math.round(val) + '%';
+        },
+
+        isBalanceProvider(provider) {
+          return ['deepseek', 'stepfun', 'siliconflow', 'openrouter', 'novita'].includes(provider);
+        },
+
+        formatBalanceValue(val, unit) {
+          if (val == null) return '';
+          const u = unit || '';
+          return val.toFixed(2) + ' ' + u;
+        },
+
+        getProviderLabel(provider) {
+          const item = this.PROVIDER_LIST.find(p => p.value === provider);
+          return item ? item.label : '请选择';
         },
 
         formatResetTime(isoStr) {

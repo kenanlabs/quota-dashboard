@@ -68,7 +68,8 @@ router.get('/usage', (req, res) => {
 
     const result = keys.map(key => {
       const snapshot = db.prepare(`
-        SELECT usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly, queried_at
+        SELECT usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly,
+               balance_remaining, balance_used, balance_total, balance_unit, queried_at
         FROM usage_snapshots
         WHERE api_key_id = ?
         ORDER BY id DESC
@@ -99,7 +100,8 @@ router.get('/usage/:id/history', (req, res) => {
   try {
     const keyId = req.params.id;
     const history = db.prepare(`
-      SELECT usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly, queried_at
+      SELECT usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly,
+             balance_remaining, balance_used, balance_total, balance_unit, queried_at
       FROM usage_snapshots
       WHERE api_key_id = ?
       ORDER BY id DESC
@@ -131,15 +133,23 @@ router.post('/usage/refresh', async (req, res) => {
     for (const key of keys) {
       try {
         const usage = await fetchUsage(key);
+        const bal = usage.balance || {};
         db.prepare(`
           INSERT INTO usage_snapshots (
-            api_key_id, usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly, raw_response
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            api_key_id, usage_5h, reset_5h, usage_7d, reset_7d,
+            usage_monthly, reset_monthly,
+            balance_remaining, balance_used, balance_total, balance_unit,
+            raw_response
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           key.id,
           usage.usage5h, usage.reset5h,
           usage.usage7d, usage.reset7d,
           usage.usageMonthly, usage.resetMonthly,
+          bal.remaining != null ? bal.remaining : null,
+          bal.used != null ? bal.used : null,
+          bal.total != null ? bal.total : null,
+          bal.unit || null,
           JSON.stringify(usage.raw)
         );
         results.push({ id: key.id, status: 'success' });
@@ -167,15 +177,23 @@ router.post('/usage/refresh/:id', async (req, res) => {
     }
 
     const usage = await fetchUsage(key);
+    const bal = usage.balance || {};
     db.prepare(`
       INSERT INTO usage_snapshots (
-        api_key_id, usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly, raw_response
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        api_key_id, usage_5h, reset_5h, usage_7d, reset_7d,
+        usage_monthly, reset_monthly,
+        balance_remaining, balance_used, balance_total, balance_unit,
+        raw_response
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       key.id,
       usage.usage5h, usage.reset5h,
       usage.usage7d, usage.reset7d,
       usage.usageMonthly, usage.resetMonthly,
+      bal.remaining != null ? bal.remaining : null,
+      bal.used != null ? bal.used : null,
+      bal.total != null ? bal.total : null,
+      bal.unit || null,
       JSON.stringify(usage.raw)
     );
 
