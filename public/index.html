@@ -94,9 +94,9 @@
 
   <!-- 顶部导航栏 -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center p-1.5 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+      <div class="flex min-w-0 items-center space-x-2 sm:space-x-3">
+        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center p-1.5 shadow-sm">
             <img x-show="settingsLoaded" :src="settings.site_icon" :alt="settings.site_title" class="w-full h-full object-contain">
           </div>
           <div x-show="!settingsLoaded">
@@ -104,19 +104,19 @@
             <div class="h-3 w-36 bg-slate-100 rounded animate-pulse"></div>
           </div>
           <div x-show="settingsLoaded">
-            <h1 class="text-lg font-bold text-slate-900 leading-tight" x-text="settings.site_title">Quota Dashboard</h1>
-            <p class="text-xs text-slate-500" x-text="settings.site_description">AI 模型 API Key 用量与配额监控</p>
+            <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate" x-text="settings.site_title">Quota Dashboard</h1>
+            <p class="text-xs text-slate-500 hidden sm:block" x-text="settings.site_description">AI 模型 API Key 用量与配额监控</p>
           </div>
       </div>
 
-      <div class="flex items-center space-x-3">
+      <div class="flex items-center space-x-1.5 sm:space-x-3">
         <!-- 排序 -->
         <div class="relative" x-data="{ open: false }">
-          <button @click="open = !open" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm">
-            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button @click="open = !open" class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm">
+            <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/>
             </svg>
-            <span x-text="sortBy === 'default' ? '排序' : (sortBy === 'usage_5h' ? '5小时' : sortBy === 'usage_7d' ? '7天' : '月')"></span>
+            <span class="hidden sm:inline" x-text="sortBy === 'default' ? '排序' : (sortBy === 'usage_5h' ? '5小时' : sortBy === 'usage_7d' ? '7天' : '月')"></span>
             <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/>
             </svg>
@@ -139,50 +139,51 @@
         <button
           @click="fetchData()"
           :disabled="loading"
-          class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm disabled:opacity-50"
+          class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm disabled:opacity-50"
         >
-          <svg :class="{'animate-spin': loading}" class="w-4 h-4 mr-1.5 text-[#0f766e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg :class="{'animate-spin': loading}" class="w-4 h-4 sm:mr-1.5 text-[#0f766e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
           </svg>
-          <span x-text="loading ? '刷新中...' : '刷新'"></span>
+          <span class="hidden sm:inline" x-text="loading ? '刷新中...' : '刷新'"></span>
         </button>
 
         <!-- 管理员控件 -->
         <template x-if="!isAdmin">
           <button
             @click="showLoginModal = true"
-            class="inline-flex items-center px-3.5 py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm"
+            class="inline-flex items-center px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm"
           >
             登录
           </button>
         </template>
 
         <template x-if="isAdmin">
-          <div class="flex items-center space-x-2">
+          <div class="flex items-center space-x-1 sm:space-x-2">
             <button
               @click="openSettingsModal()"
-              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm"
+              class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm"
             >
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                 </svg>
-                系统设置
+                <span class="hidden sm:inline">系统设置</span>
             </button>
             <button
               @click="openAddModal()"
-              class="inline-flex items-center px-3.5 py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm"
+              class="inline-flex items-center px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs font-medium rounded-lg text-[#0f766e] bg-[#dff4f2] hover:bg-[#cbf0ec] active:bg-[#b5e9e4] border border-[#b2e8e3] transition shadow-sm"
             >
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                 </svg>
-                添加 Key
+                <span class="hidden sm:inline">添加 Key</span>
             </button>
             <button
               @click="logout()"
-              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition"
+              class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition"
             >
-              退出
+              <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+              <span class="hidden sm:inline">退出</span>
             </button>
           </div>
         </template>
@@ -240,7 +241,7 @@
     <div class="space-y-4" x-show="filteredKeys.length > 0">
       <template x-for="(item, index) in filteredKeys" :key="item.id">
         <div
-          class="bg-white rounded-xl border border-slate-200 transition shadow-sm p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 relative"
+          class="bg-white rounded-xl border border-slate-200 transition shadow-sm p-3 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 relative"
           :class="{
             'opacity-40 border-dashed border-teal-400': draggedIndex === index,
             'border-teal-500 ring-2 ring-teal-200': dragOverIndex === index && draggedIndex !== index,
@@ -257,7 +258,7 @@
         >
 
           <!-- 左侧：图标 + 拖拽手柄 + 标题与团队信息 -->
-          <div class="flex items-center space-x-3 min-w-0">
+          <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
             <!-- 拖拽点点图标 -->
             <div
               class="flex-shrink-0 transition-colors"
@@ -302,13 +303,13 @@
           </div>
 
           <!-- 右侧：用量展示栏与操作按钮 -->
-          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-3 sm:gap-6 flex-shrink-0">
+          <div class="flex w-full flex-col sm:flex-row items-start sm:items-center justify-end gap-3 sm:gap-6 md:w-auto md:flex-shrink-0">
 
             <!-- 用量数据行 (5小时 / 7天 / 每月) -->
-            <div class="flex items-center space-x-4 text-xs">
+            <div class="flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:w-auto">
 
               <!-- 5小时用量 -->
-              <div class="flex items-center space-x-1.5" x-show="settings.visible_fields?.usage_5h !== false && item.usage">
+              <div class="flex items-center space-x-1.5 whitespace-nowrap" x-show="settings.visible_fields?.usage_5h !== false && item.usage">
                 <span class="text-slate-500">5小时:</span>
                 <span
                   class="font-semibold px-1.5 py-0.5 rounded text-xs num-tabular"
@@ -319,7 +320,7 @@
               </div>
 
               <!-- 7天用量 -->
-              <div class="flex items-center space-x-1.5" x-show="settings.visible_fields?.usage_7d !== false && item.usage && item.usage.usage_7d !== null">
+              <div class="flex items-center space-x-1.5 whitespace-nowrap" x-show="settings.visible_fields?.usage_7d !== false && item.usage && item.usage.usage_7d !== null">
                 <span class="text-slate-500">7天:</span>
                 <span
                   class="font-semibold px-1.5 py-0.5 rounded text-xs num-tabular"
@@ -330,7 +331,7 @@
               </div>
 
               <!-- 每月用量 -->
-              <div class="flex items-center space-x-1.5" x-show="settings.visible_fields?.usage_monthly !== false && item.usage && item.usage.usage_monthly !== null">
+              <div class="flex items-center space-x-1.5 whitespace-nowrap" x-show="settings.visible_fields?.usage_monthly !== false && item.usage && item.usage.usage_monthly !== null">
                 <span class="text-slate-500">每月:</span>
                 <span
                   class="font-semibold px-1.5 py-0.5 rounded text-xs num-tabular"
@@ -341,7 +342,7 @@
               </div>
 
               <!-- 余额显示（余额型 Provider） -->
-              <div class="flex items-center space-x-3" x-show="isBalanceProvider(item.provider) && item.usage && item.usage.balance_remaining != null">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1" x-show="isBalanceProvider(item.provider) && item.usage && item.usage.balance_remaining != null">
                 <template x-if="item.usage.balance_used != null">
                   <div class="flex items-center space-x-1.5">
                     <span class="text-slate-500">已使用:</span>
@@ -365,7 +366,7 @@
             </div>
 
             <!-- 最后刷新时间 & 操作 -->
-            <div class="flex items-center space-x-3 text-xs text-slate-400 border-l border-slate-100 sm:pl-4">
+            <div class="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-400 sm:w-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
               <span class="whitespace-nowrap" x-show="settings.visible_fields?.last_updated !== false" x-text="formatRelativeTime(item.usage?.queried_at)"></span>
 
               <!-- 单个 Key 刷新按钮（所有用户可见） -->
