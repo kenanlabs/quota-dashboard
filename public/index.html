@@ -336,7 +336,7 @@
               <span class="whitespace-nowrap" x-show="settings.visible_fields?.last_updated !== false" x-text="formatRelativeTime(item.usage?.queried_at)"></span>
 
               <!-- 单个 Key 刷新按钮（所有用户可见） -->
-              <button @click="refreshKey(item.id)" :disabled="refreshingKeys[item.id]" class="p-1 text-slate-400 hover:text-teal-600 rounded" title="单独刷新此 Key">
+              <button @click="refreshKey(item.id)" :disabled="!!refreshingKeys[item.id]" class="p-1 text-slate-400 hover:text-teal-600 rounded" title="单独刷新此 Key">
                 <svg :class="{'animate-spin': refreshingKeys[item.id]}" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
@@ -844,11 +844,27 @@
             const res = await fetch(`/api/usage/refresh/${id}`, { method: 'POST' });
             const json = await res.json();
             if (json.success) {
-              // 重新拉取所有 Key 的最新数据（不触发全量刷新）
-              const dataRes = await fetch('/api/usage');
-              const dataJson = await dataRes.json();
-              if (dataJson.success) {
-                this.keys = dataJson.data;
+              if (this.isAdmin) {
+                const [keysRes, usageRes] = await Promise.all([
+                  fetch('/api/admin/keys', { headers: { 'Authorization': `Bearer ${this.adminToken}` } }),
+                  fetch('/api/usage')
+                ]);
+                const keysJson = await keysRes.json();
+                const usageJson = await usageRes.json();
+                if (keysJson.success && usageJson.success) {
+                  const usageMap = {};
+                  usageJson.data.forEach(u => { usageMap[u.id] = u.usage; });
+                  this.keys = keysJson.data.map(k => ({
+                    ...k,
+                    usage: usageMap[k.id] || null
+                  }));
+                }
+              } else {
+                const dataRes = await fetch('/api/usage');
+                const dataJson = await dataRes.json();
+                if (dataJson.success) {
+                  this.keys = dataJson.data;
+                }
               }
               this.showToast('刷新成功');
             } else {
@@ -1076,6 +1092,14 @@
         // Drag & Drop Handlers
         handleDragStart(e, index) {
           if (!this.isAdmin || this.searchQuery.trim()) return;
+
+          const interactiveEl = e.target.closest('button, a, [role="switch"]');
+          if (interactiveEl) {
+            e.preventDefault();
+            interactiveEl.click();
+            return;
+          }
+
           this.draggedIndex = index;
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', index);
