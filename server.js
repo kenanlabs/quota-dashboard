@@ -6,6 +6,7 @@ const db = require('./db/schema');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const { fetchUsage } = require('./providers');
+const sub2api = require('./services/sub2api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,21 +29,38 @@ async function refreshAllUsage() {
     for (const key of keys) {
       try {
         const usage = await fetchUsage(key);
+        const bal = usage.balance || {};
         db.prepare(`
           INSERT INTO usage_snapshots (
-            api_key_id, usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly, raw_response
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            api_key_id, usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly,
+            balance_remaining, balance_used, balance_total, balance_unit,
+            raw_response
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           key.id,
           usage.usage5h, usage.reset5h,
           usage.usage7d, usage.reset7d,
           usage.usageMonthly, usage.resetMonthly,
+          bal.remaining != null ? bal.remaining : null,
+          bal.used != null ? bal.used : null,
+          bal.total != null ? bal.total : null,
+          bal.unit || null,
           JSON.stringify(usage.raw)
         );
         console.log(`[OK] Refreshed usage for key: ${key.display_name} (ID: ${key.id})`);
       } catch (err) {
         console.error(`[ERROR] Failed to refresh key: ${key.display_name} (ID: ${key.id}):`, err.message);
       }
+    }
+
+    // 尝试同步 Sub2API 分组信息
+    try {
+      const syncRes = await sub2api.syncAllKeys(db);
+      if (syncRes && syncRes.updatedCount > 0) {
+        console.log(`[OK] Sub2API groups synced: ${syncRes.message}`);
+      }
+    } catch (subErr) {
+      // 忽略 Sub2API 错误
     }
   } catch (err) {
     console.error('[CRITICAL] Refresh job failed:', err.message);

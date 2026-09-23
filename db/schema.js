@@ -40,6 +40,8 @@ function initDb() {
       member_count INTEGER DEFAULT 0,
       sort_order INTEGER DEFAULT 0,
       enabled BOOLEAN DEFAULT 1,
+      sub2api_account_id INTEGER,
+      sub2api_groups TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -82,17 +84,33 @@ function initDb() {
     }
   }
 
+  // Migrate existing DB: add sub2api columns to api_keys if missing
+  try {
+    db.exec('ALTER TABLE api_keys ADD COLUMN sub2api_groups TEXT');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.exec('ALTER TABLE api_keys ADD COLUMN sub2api_account_id INTEGER');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Initialize default system settings
   const defaultSettings = {
     site_title: 'Quota Dashboard',
     site_description: 'AI 模型 API Key 用量与配额监控',
     site_icon: '/favicon.svg',
     refresh_interval: '300',
+    sub2api_url: '',
+    sub2api_api_key: '',
     visible_fields: JSON.stringify({
       display_name: true,
       team: true,
       owner: true,
       member_count: true,
+      sub2api_groups: true,
       usage_5h: true,
       usage_7d: true,
       usage_monthly: true,

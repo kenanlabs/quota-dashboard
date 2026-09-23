@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require('../db/schema');
 const fs = require('fs');
 const path = require('path');
+const { fetchUsage } = require('../providers');
+const sub2api = require('../services/sub2api');
 
 /**
  * GET /api/settings
@@ -15,12 +17,19 @@ router.get('/settings', (req, res) => {
     rows.forEach(r => {
       if (r.key === 'visible_fields') {
         try {
-          settings[r.key] = JSON.parse(r.value);
+          const vf = JSON.parse(r.value);
+          if (vf.sub2api_groups === undefined) {
+            vf.sub2api_groups = true;
+          }
+          settings[r.key] = vf;
         } catch (e) {
-          settings[r.key] = {};
+          settings[r.key] = { sub2api_groups: true };
         }
       } else if (r.key === 'refresh_interval') {
         settings[r.key] = parseInt(r.value, 10) || 300;
+      } else if (r.key === 'sub2api_api_key') {
+        // 普通接口不暴露完整的 sub2api 管理员 key，仅暴露是否已配置
+        settings['sub2api_configured'] = !!(r.value && r.value.trim());
       } else {
         settings[r.key] = r.value;
       }
@@ -60,7 +69,7 @@ router.get('/icons', (req, res) => {
 router.get('/usage', (req, res) => {
   try {
     const keys = db.prepare(`
-      SELECT id, provider, display_name, team, owner, member_count, sort_order, enabled, created_at
+      SELECT id, provider, display_name, team, owner, member_count, sort_order, enabled, sub2api_groups, created_at
       FROM api_keys
       WHERE enabled = 1
       ORDER BY sort_order ASC, id ASC
@@ -123,8 +132,6 @@ router.get('/usage/:id/history', (req, res) => {
  * POST /api/usage/refresh
  * Public: refresh usage data for all active keys
  */
-const { fetchUsage } = require('../providers');
-
 router.post('/usage/refresh', async (req, res) => {
   try {
     const keys = db.prepare('SELECT * FROM api_keys WHERE enabled = 1').all();
@@ -156,6 +163,13 @@ router.post('/usage/refresh', async (req, res) => {
       } catch (err) {
         results.push({ id: key.id, status: 'error', message: err.message });
       }
+    }
+
+    // 尝试同步 Sub2API 分组信息（非阻塞）
+    try {
+      await sub2api.syncAllKeys(db);
+    } catch (e) {
+      // 忽略 Sub2API 同步错误，不影响用量刷新
     }
 
     res.json({ success: true, results });
@@ -196,6 +210,13 @@ router.post('/usage/refresh/:id', async (req, res) => {
       bal.unit || null,
       JSON.stringify(usage.raw)
     );
+
+    // 尝试同步单个 Key 的 Sub2API 分组
+    try {
+      await sub2api.syncSingleKey(keyId, db);
+    } catch (e) {
+      // 忽略 Sub2API 单个同步错误
+    }
 
     res.json({ success: true, id: key.id });
   } catch (err) {
