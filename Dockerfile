@@ -38,6 +38,7 @@ COPY db/ ./db/
 COPY routes/ ./routes/
 COPY providers/ ./providers/
 COPY middleware/ ./middleware/
+COPY services/ ./services/
 COPY public/ ./public/
 
 # 创建数据目录
