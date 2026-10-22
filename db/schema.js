@@ -42,6 +42,7 @@ function initDb() {
       enabled BOOLEAN DEFAULT 1,
       sub2api_account_id INTEGER,
       sub2api_groups TEXT,
+      sub2api_schedulable INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -97,6 +98,12 @@ function initDb() {
     // Column already exists, ignore
   }
 
+  try {
+    db.exec('ALTER TABLE api_keys ADD COLUMN sub2api_schedulable INTEGER');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Initialize default system settings
   const defaultSettings = {
     site_title: 'Quota Dashboard',
@@ -111,6 +118,7 @@ function initDb() {
       owner: true,
       member_count: true,
       sub2api_groups: true,
+      sub2api_schedulable: true,
       usage_5h: true,
       usage_7d: true,
       usage_monthly: true,

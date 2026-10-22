@@ -21,9 +21,12 @@ router.get('/settings', (req, res) => {
           if (vf.sub2api_groups === undefined) {
             vf.sub2api_groups = true;
           }
+          if (vf.sub2api_schedulable === undefined) {
+            vf.sub2api_schedulable = true;
+          }
           settings[r.key] = vf;
         } catch (e) {
-          settings[r.key] = { sub2api_groups: true };
+          settings[r.key] = { sub2api_groups: true, sub2api_schedulable: true };
         }
       } else if (r.key === 'refresh_interval') {
         settings[r.key] = parseInt(r.value, 10) || 300;
@@ -69,7 +72,8 @@ router.get('/icons', (req, res) => {
 router.get('/usage', (req, res) => {
   try {
     const keys = db.prepare(`
-      SELECT id, provider, display_name, team, owner, member_count, sort_order, enabled, sub2api_groups, created_at
+      SELECT id, provider, display_name, team, owner, member_count, sort_order, enabled,
+             sub2api_groups, sub2api_account_id, sub2api_schedulable, created_at
       FROM api_keys
       WHERE enabled = 1
       ORDER BY sort_order ASC, id ASC
@@ -89,8 +93,11 @@ router.get('/usage', (req, res) => {
         snapshot.queried_at = snapshot.queried_at.replace(' ', 'T') + 'Z';
       }
 
+      const { sub2api_account_id, ...publicKey } = key;
+
       return {
-        ...key,
+        ...publicKey,
+        sub2api_linked: !!sub2api_account_id,
         usage: snapshot || null
       };
     });
@@ -219,6 +226,52 @@ router.post('/usage/refresh/:id', async (req, res) => {
     }
 
     res.json({ success: true, id: key.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/usage/:id/sub2api/schedulable
+ * Public: enable/disable the Sub2API account scheduling for a key
+ */
+router.post('/usage/:id/sub2api/schedulable', async (req, res) => {
+  try {
+    const keyId = req.params.id;
+    const { schedulable } = req.body;
+
+    if (typeof schedulable !== 'boolean') {
+      return res.status(400).json({ error: '无效的调度状态' });
+    }
+
+    const key = db.prepare('SELECT id, sub2api_account_id FROM api_keys WHERE id = ? AND enabled = 1').get(keyId);
+    if (!key) {
+      return res.status(404).json({ error: 'Key not found or disabled' });
+    }
+    if (!key.sub2api_account_id) {
+      return res.status(400).json({ error: '该 Key 未关联 Sub2API 账号' });
+    }
+
+    const urlRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_url'").get();
+    const apiKeyRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_api_key'").get();
+    const sub2apiUrl = urlRow ? urlRow.value.trim() : '';
+    const sub2apiApiKey = apiKeyRow ? apiKeyRow.value.trim() : '';
+
+    if (!sub2apiUrl || !sub2apiApiKey) {
+      return res.status(400).json({ error: '未配置 Sub2API 服务地址或管理员 API Key' });
+    }
+
+    const result = await sub2api.setAccountSchedulable(
+      sub2apiUrl,
+      sub2apiApiKey,
+      key.sub2api_account_id,
+      schedulable
+    );
+
+    db.prepare('UPDATE api_keys SET sub2api_schedulable = ? WHERE id = ?')
+      .run(result.schedulable ? 1 : 0, keyId);
+
+    res.json({ success: true, schedulable: result.schedulable });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

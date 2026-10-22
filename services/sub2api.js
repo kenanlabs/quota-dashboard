@@ -349,6 +349,150 @@ function matchKeyGroups(keyRecord, sub2apiData) {
 }
 
 /**
+ * 计算某个 Key 与 Sub2API 账号的匹配强度
+ * 0 不匹配，1 弱匹配，2 名称精确匹配，3 凭证匹配，4 账号 ID 强关联
+ */
+function getAccountMatchStrength(keyRecord, acc) {
+  if (!keyRecord || !acc) return 0;
+
+  const apiKey = (keyRecord.api_key || '').trim();
+  const displayName = (keyRecord.display_name || '').trim().toLowerCase();
+  const provider = (keyRecord.provider || '').trim().toLowerCase();
+  const accName = (acc.name || '').trim().toLowerCase();
+
+  if (keyRecord.sub2api_account_id && acc.id === keyRecord.sub2api_account_id) {
+    return 4;
+  }
+
+  if (apiKey && acc.credentials) {
+    const accKey = acc.credentials.api_key || acc.credentials.token || acc.credentials.access_token;
+    if (accKey && typeof accKey === 'string' && accKey.trim() === apiKey) {
+      return 3;
+    }
+  }
+
+  if (displayName && accName && accName === displayName) {
+    return 2;
+  }
+
+  if (displayName && accName && provider) {
+    const accPlatform = (acc.platform || '').trim().toLowerCase();
+    if ((accPlatform === provider || accPlatform.includes(provider) || provider.includes(accPlatform))) {
+      if (accName.includes(displayName) || displayName.includes(accName)) {
+        return 1;
+      }
+    }
+  }
+
+  if (apiKey && apiKey.length >= 8 && accName) {
+    const keySuffix6 = apiKey.slice(-6).toLowerCase();
+    const keySuffix8 = apiKey.length >= 12 ? apiKey.slice(-8).toLowerCase() : keySuffix6;
+    const notesLower = (acc.notes && typeof acc.notes === 'string') ? acc.notes.toLowerCase() : '';
+    if (notesLower.includes(keySuffix6) || notesLower.includes(keySuffix8) || (apiKey.length >= 16 && notesLower.includes(apiKey.toLowerCase()))) {
+      return 1;
+    }
+    if (accName.includes(keySuffix6) || accName.includes(keySuffix8)) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * 查找某个 Key 在 Sub2API 中对应的账号
+ * @param {object} keyRecord
+ * @param {object} sub2apiData
+ * @returns {{account: object, strength: number}|null}
+ */
+function findKeyAccount(keyRecord, sub2apiData) {
+  if (!sub2apiData || !keyRecord) return null;
+  const { accounts = [] } = sub2apiData;
+
+  let best = null;
+  for (const acc of accounts) {
+    if (!acc) continue;
+    const strength = getAccountMatchStrength(keyRecord, acc);
+    if (strength > 0 && (!best || strength > best.strength)) {
+      best = { account: acc, strength };
+      if (strength === 4) break;
+    }
+  }
+  return best;
+}
+
+/**
+ * 设置 Sub2API 账号的调度开关
+ * @param {string} rawUrl
+ * @param {string} apiKey
+ * @param {number|string} accountId
+ * @param {boolean} schedulable
+ * @returns {Promise<{schedulable: boolean}>}
+ */
+async function setAccountSchedulable(rawUrl, apiKey, accountId, schedulable) {
+  const baseUrl = normalizeUrl(rawUrl);
+  if (!baseUrl) throw new Error('Sub2API Base URL 不能为空');
+  if (!apiKey) throw new Error('Sub2API 管理员 API Key 不能为空');
+
+  const id = Number(accountId);
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error('无效的 Sub2API 账号 ID');
+  }
+
+  const headers = getAuthHeaders(apiKey);
+
+  const readSchedulable = (payload) => {
+    if (payload && typeof payload.schedulable === 'boolean') return payload.schedulable;
+    return schedulable;
+  };
+
+  try {
+    const res = await axios.post(
+      `${baseUrl}/api/v1/admin/accounts/${id}/schedulable`,
+      { schedulable },
+      { headers, timeout: 10000 }
+    );
+    return { schedulable: readSchedulable(res.data && res.data.data) };
+  } catch (err) {
+    const status = err.response && err.response.status;
+    // 兼容不支持专用调度接口的旧版 Sub2API，回退到账号更新接口
+    if (status === 404 || status === 405) {
+      try {
+        const res = await axios.put(
+          `${baseUrl}/api/v1/admin/accounts/${id}`,
+          { schedulable },
+          { headers, timeout: 10000 }
+        );
+        return { schedulable: readSchedulable(res.data && res.data.data) };
+      } catch (fallbackErr) {
+        throw new Error(formatSub2apiError(fallbackErr));
+      }
+    }
+    throw new Error(formatSub2apiError(err));
+  }
+}
+
+/**
+ * 格式化 Sub2API 请求错误
+ */
+function formatSub2apiError(err) {
+  if (!err) return '未知错误';
+  if (err.response) {
+    const data = err.response.data;
+    if (data && data.message) {
+      return `Sub2API 错误(${err.response.status}): ${data.message}`;
+    }
+    if (err.response.status === 401 || err.response.status === 403) {
+      return `认证失败(${err.response.status}): 管理员 API Key 无效或权限不足`;
+    }
+    return `Sub2API 请求失败，状态码: ${err.response.status}`;
+  }
+  if (err.code === 'ECONNREFUSED') return '无法连接 Sub2API 服务';
+  if (err.code === 'ETIMEDOUT' || (err.message && err.message.includes('timeout'))) return '连接 Sub2API 超时';
+  return err.message || 'Sub2API 请求失败';
+}
+
+/**
  * 同步所有启用 Key 在 Sub2API 中的分组信息并写入数据库
  * @param {object} db - better-sqlite3 数据库实例
  * @returns {Promise<{updatedCount: number, totalKeys: number, message: string}>}
@@ -373,17 +517,32 @@ async function syncAllKeys(db) {
     throw new Error('无法获取 Sub2API 数据');
   }
 
-  const keys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups FROM api_keys WHERE enabled = 1').all();
-  const updateStmt = db.prepare('UPDATE api_keys SET sub2api_groups = ? WHERE id = ?');
+  const keys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable FROM api_keys WHERE enabled = 1').all();
+  const updateStmt = db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ? WHERE id = ?');
 
   let updatedCount = 0;
   const updateTx = db.transaction((items) => {
     for (const item of items) {
       const groups = matchKeyGroups(item, sub2apiData);
       const groupStr = groups.length > 0 ? groups.join(', ') : null;
+
+      const match = findKeyAccount(item, sub2apiData);
+      let schedulable = item.sub2api_schedulable;
+      let accountId = item.sub2api_account_id;
+      if (match) {
+        if (accountId == null && match.strength >= 3) {
+          accountId = match.account.id;
+        }
+        if (typeof match.account.schedulable === 'boolean') {
+          schedulable = match.account.schedulable ? 1 : 0;
+        }
+      }
+
       // 仅当与现有值不同时更新
-      if (item.sub2api_groups !== groupStr) {
-        updateStmt.run(groupStr, item.id);
+      if (item.sub2api_groups !== groupStr ||
+          item.sub2api_schedulable !== schedulable ||
+          item.sub2api_account_id !== accountId) {
+        updateStmt.run(groupStr, schedulable, accountId, item.id);
         updatedCount++;
       }
     }
@@ -414,7 +573,7 @@ async function syncSingleKey(keyId, db) {
     throw new Error('未配置 Sub2API 服务地址或管理员 API Key');
   }
 
-  const keyRecord = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups FROM api_keys WHERE id = ?').get(keyId);
+  const keyRecord = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable FROM api_keys WHERE id = ?').get(keyId);
   if (!keyRecord) {
     throw new Error('未找到指定的 API Key');
   }
@@ -427,12 +586,26 @@ async function syncSingleKey(keyId, db) {
   const groups = matchKeyGroups(keyRecord, sub2apiData);
   const groupStr = groups.length > 0 ? groups.join(', ') : '';
 
-  db.prepare('UPDATE api_keys SET sub2api_groups = ? WHERE id = ?').run(groupStr || null, keyId);
+  const match = findKeyAccount(keyRecord, sub2apiData);
+  let schedulable = keyRecord.sub2api_schedulable;
+  let accountId = keyRecord.sub2api_account_id;
+  if (match) {
+    if (accountId == null && match.strength >= 3) {
+      accountId = match.account.id;
+    }
+    if (typeof match.account.schedulable === 'boolean') {
+      schedulable = match.account.schedulable ? 1 : 0;
+    }
+  }
+
+  db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ? WHERE id = ?')
+    .run(groupStr || null, schedulable, accountId, keyId);
 
   return {
     success: true,
     groups,
-    sub2api_groups: groupStr
+    sub2api_groups: groupStr,
+    sub2api_schedulable: schedulable == null ? null : !!schedulable
   };
 }
 
@@ -504,6 +677,7 @@ async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
       api_key_masked: maskedKey,
       imported: !!matched,
       local_key_id: matched ? matched.id : null,
+      schedulable: typeof acc.schedulable === 'boolean' ? acc.schedulable : null,
       // 导入/显示开关：如果已经导入过，继承其当前显示状态(enabled: 1/0)；未导入默认勾选显示(1)
       enabled: matched ? (matched.enabled ? 1 : 0) : 1
     };
@@ -526,12 +700,13 @@ function importSub2apiAccounts(accountsToImport, db) {
     return { importedCount: 0, updatedCount: 0, total: 0 };
   }
 
-  const existingKeys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, enabled FROM api_keys').all();
+  const existingKeys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable, enabled FROM api_keys').all();
 
   const insertStmt = db.prepare(`
     INSERT INTO api_keys (
-      provider, display_name, api_key, base_url, team, owner, member_count, sort_order, enabled, sub2api_account_id, sub2api_groups
-    ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+      provider, display_name, api_key, base_url, team, owner, member_count, sort_order, enabled,
+      sub2api_account_id, sub2api_groups, sub2api_schedulable
+    ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
   `);
 
   const updateStmt = db.prepare(`
@@ -542,7 +717,8 @@ function importSub2apiAccounts(accountsToImport, db) {
       base_url = CASE WHEN ? != '' THEN ? ELSE base_url END,
       sub2api_groups = ?,
       enabled = ?,
-      sub2api_account_id = ?
+      sub2api_account_id = ?,
+      sub2api_schedulable = ?
     WHERE id = ?
   `);
 
@@ -573,12 +749,16 @@ function importSub2apiAccounts(accountsToImport, db) {
         matched = existingKeys.find(k => k.display_name.trim().toLowerCase() === name.trim().toLowerCase());
       }
 
+      const schedulable = typeof item.schedulable === 'boolean'
+        ? (item.schedulable ? 1 : 0)
+        : (matched ? matched.sub2api_schedulable : null);
+
       if (matched) {
-        updateStmt.run(name, provider, apiKeyVal, apiKeyVal, baseUrlVal, baseUrlVal, groupsStr || null, isEnabled, accId, matched.id);
+        updateStmt.run(name, provider, apiKeyVal, apiKeyVal, baseUrlVal, baseUrlVal, groupsStr || null, isEnabled, accId, schedulable, matched.id);
         updatedCount++;
       } else {
         const finalKey = apiKeyVal || `sub2api_${provider}_${accId || Date.now()}`;
-        insertStmt.run(provider, name, finalKey, baseUrlVal || null, teamVal, ownerVal, isEnabled, accId, groupsStr || null);
+        insertStmt.run(provider, name, finalKey, baseUrlVal || null, teamVal, ownerVal, isEnabled, accId, groupsStr || null, schedulable);
         importedCount++;
       }
     }
@@ -600,6 +780,8 @@ module.exports = {
   matchKeyGroups,
   syncAllKeys,
   syncSingleKey,
+  setAccountSchedulable,
+  findKeyAccount,
   fetchSub2apiAccounts,
   importSub2apiAccounts,
   detectProvider
