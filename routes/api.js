@@ -281,4 +281,46 @@ router.post('/usage/:id/sub2api/schedulable', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/usage/:id/sub2api/clear-error
+ * Public: clear the error/rate-limit status of a Sub2API account
+ */
+router.post('/usage/:id/sub2api/clear-error', async (req, res) => {
+  try {
+    const keyId = req.params.id;
+
+    const key = db.prepare('SELECT id, sub2api_account_id, sub2api_status FROM api_keys WHERE id = ? AND enabled = 1').get(keyId);
+    if (!key) {
+      return res.status(404).json({ error: 'Key not found or disabled' });
+    }
+    if (!key.sub2api_account_id) {
+      return res.status(400).json({ error: '该 Key 未关联 Sub2API 账号' });
+    }
+
+    const urlRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_url'").get();
+    const apiKeyRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_api_key'").get();
+    const sub2apiUrl = urlRow ? urlRow.value.trim() : '';
+    const sub2apiApiKey = apiKeyRow ? apiKeyRow.value.trim() : '';
+
+    if (!sub2apiUrl || !sub2apiApiKey) {
+      return res.status(400).json({ error: '未配置 Sub2API 服务地址或管理员 API Key' });
+    }
+
+    const result = await sub2api.clearAccountError(
+      sub2apiUrl,
+      sub2apiApiKey,
+      key.sub2api_account_id
+    );
+
+    if (result.success && result.status) {
+      db.prepare('UPDATE api_keys SET sub2api_status = ?, sub2api_error_message = ? WHERE id = ?')
+        .run(result.status, '', keyId);
+    }
+
+    res.json({ success: result.success, status: result.status, error_message: result.error_message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

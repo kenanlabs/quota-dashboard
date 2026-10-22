@@ -375,13 +375,30 @@
                 <template
                   x-if="settings.visible_fields?.sub2api_status !== false && item.sub2api_status && item.sub2api_status !== 'active' && item.sub2api_status !== 'unknown'"
                 >
-                  <span
-                    class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium border"
-                    :class="getAccountStatusClass(item.sub2api_status)"
-                    :title="item.sub2api_error_message ? (item.sub2api_status + '：' + item.sub2api_error_message) : item.sub2api_status"
-                  >
-                    <span x-text="formatAccountStatus(item.sub2api_status)"></span>
-                  </span>
+                  <div class="inline-flex items-center gap-1">
+                    <span
+                      class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium border"
+                      :class="getAccountStatusClass(item.sub2api_status)"
+                      :title="item.sub2api_error_message ? (item.sub2api_status + '：' + item.sub2api_error_message) : item.sub2api_status"
+                    >
+                      <span x-text="formatAccountStatus(item.sub2api_status)"></span>
+                    </span>
+                    <button
+                      type="button"
+                      @click.stop="clearSub2apiError(item)"
+                      @mousedown.stop
+                      @dragstart.stop.prevent
+                      draggable="false"
+                      :disabled="!!clearingErrorId"
+                      class="ml-0.5 p-0.5 rounded text-xs transition-all duration-150 focus:outline-none disabled:opacity-50 disabled:cursor-wait"
+                      :class="item.sub2api_status === 'error' ? 'text-rose-600 hover:bg-rose-50 active:scale-90' : 'text-amber-600 hover:bg-amber-50 active:scale-90'"
+                      title="恢复账号调度状态"
+                    >
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                      </svg>
+                    </button>
+                  </div>
                 </template>
                 <template x-if="settings.visible_fields?.sub2api_schedulable !== false && item.enabled !== 0 && item.sub2api_linked && item.sub2api_schedulable !== null && item.sub2api_schedulable !== undefined">
                   <div
@@ -1360,6 +1377,7 @@
         loading: false,
         refreshingKeys: {},
         togglingSchedule: {},
+        clearingErrorId: null,
         countdown: 60,
         timer: null,
         searchQuery: '',
@@ -1641,6 +1659,29 @@
             this.showToast('调度开关操作异常: ' + err.message, 'error');
           } finally {
             this.togglingSchedule = { ...this.togglingSchedule, [item.id]: false };
+          }
+        },
+
+        async clearSub2apiError(item) {
+          if (!item || !item.sub2api_linked || this.clearingErrorId) return;
+          this.clearingErrorId = item.id;
+          try {
+            const res = await fetch(`/api/usage/${item.id}/sub2api/clear-error`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const json = await res.json();
+            if (json.success && json.status) {
+              item.sub2api_status = json.status;
+              item.sub2api_error_message = json.error_message || '';
+              this.showToast('已恢复账号状态');
+            } else {
+              this.showToast(json.error || '恢复操作失败', 'error');
+            }
+          } catch (err) {
+            this.showToast('恢复操作异常: ' + err.message, 'error');
+          } finally {
+            this.clearingErrorId = null;
           }
         },
 

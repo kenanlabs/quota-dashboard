@@ -473,6 +473,42 @@ async function setAccountSchedulable(rawUrl, apiKey, accountId, schedulable) {
 }
 
 /**
+ * 清除 Sub2API 账号的错误/限流状态
+ * @param {string} rawUrl
+ * @param {string} apiKey
+ * @param {number|string} accountId
+ * @returns {Promise<{success: boolean, status?: string, error_message?: string}>}
+ */
+async function clearAccountError(rawUrl, apiKey, accountId) {
+  const baseUrl = normalizeUrl(rawUrl);
+  if (!baseUrl) throw new Error('Sub2API Base URL 不能为空');
+  if (!apiKey) throw new Error('Sub2API 管理员 API Key 不能为空');
+
+  const id = Number(accountId);
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error('无效的 Sub2API 账号 ID');
+  }
+
+  const headers = getAuthHeaders(apiKey);
+
+  try {
+    const res = await axios.post(
+      `${baseUrl}/api/v1/admin/accounts/${id}/clear-error`,
+      {},
+      { headers, timeout: 10000 }
+    );
+    const data = res.data && res.data.data;
+    return {
+      success: true,
+      status: data && data.status,
+      error_message: data && data.error_message
+    };
+  } catch (err) {
+    throw new Error(formatSub2apiError(err));
+  }
+}
+
+/**
  * 格式化 Sub2API 请求错误
  */
 function formatSub2apiError(err) {
@@ -790,9 +826,10 @@ module.exports = {
   matchKeyGroups,
   syncAllKeys,
   syncSingleKey,
-  setAccountSchedulable,
-  findKeyAccount,
   fetchSub2apiAccounts,
   importSub2apiAccounts,
-  detectProvider
+  detectProvider,
+  setAccountSchedulable,
+  findKeyAccount,
+  clearAccountError
 };
