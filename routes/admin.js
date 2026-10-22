@@ -49,6 +49,8 @@ router.get('/keys', (req, res) => {
       sub2api_linked: !!k.sub2api_account_id,
       sub2api_groups: k.sub2api_groups || '',
       sub2api_schedulable: k.sub2api_schedulable === null || k.sub2api_schedulable === undefined ? null : !!k.sub2api_schedulable,
+      sub2api_status: k.sub2api_status || null,
+      sub2api_error_message: k.sub2api_error_message || '',
       api_key_masked: k.api_key ? `${k.api_key.slice(0, 6)}...${k.api_key.slice(-4)}` : '',
       secret_access_key_masked: k.secret_access_key ? '********' : ''
     }));
@@ -359,9 +361,10 @@ router.get('/settings', (req, res) => {
           const vf = JSON.parse(r.value);
           if (vf.sub2api_groups === undefined) vf.sub2api_groups = true;
           if (vf.sub2api_schedulable === undefined) vf.sub2api_schedulable = true;
+          if (vf.sub2api_status === undefined) vf.sub2api_status = true;
           settings[r.key] = vf;
         } catch (e) {
-          settings[r.key] = { sub2api_groups: true, sub2api_schedulable: true };
+          settings[r.key] = { sub2api_groups: true, sub2api_schedulable: true, sub2api_status: true };
         }
       } else if (r.key === 'refresh_interval') {
         settings[r.key] = parseInt(r.value, 10) || 300;

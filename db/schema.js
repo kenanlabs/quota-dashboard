@@ -43,6 +43,8 @@ function initDb() {
       sub2api_account_id INTEGER,
       sub2api_groups TEXT,
       sub2api_schedulable INTEGER,
+      sub2api_status TEXT,
+      sub2api_error_message TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -100,6 +102,18 @@ function initDb() {
 
   try {
     db.exec('ALTER TABLE api_keys ADD COLUMN sub2api_schedulable INTEGER');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.exec('ALTER TABLE api_keys ADD COLUMN sub2api_status TEXT');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.exec('ALTER TABLE api_keys ADD COLUMN sub2api_error_message TEXT');
   } catch (e) {
     // Column already exists, ignore
   }

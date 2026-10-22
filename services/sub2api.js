@@ -517,8 +517,8 @@ async function syncAllKeys(db) {
     throw new Error('无法获取 Sub2API 数据');
   }
 
-  const keys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable FROM api_keys WHERE enabled = 1').all();
-  const updateStmt = db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ? WHERE id = ?');
+  const keys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable, sub2api_status, sub2api_error_message FROM api_keys WHERE enabled = 1').all();
+  const updateStmt = db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ?, sub2api_status = ?, sub2api_error_message = ? WHERE id = ?');
 
   let updatedCount = 0;
   const updateTx = db.transaction((items) => {
@@ -538,13 +538,21 @@ async function syncAllKeys(db) {
         }
       }
 
-      // 仅当与现有值不同时更新
-      if (item.sub2api_groups !== groupStr ||
+        // 兼容不存在状态字段的情况，保持旧数据可读
+        const accountStatus = acc.status || 'unknown';
+        const accountErrorMessage = acc.error_message || '';
+
+        // 仅当账号状态发生变化时才认为需要更新同步字段
+        if (
+          item.sub2api_groups !== groupStr ||
           item.sub2api_schedulable !== schedulable ||
-          item.sub2api_account_id !== accountId) {
-        updateStmt.run(groupStr, schedulable, accountId, item.id);
-        updatedCount++;
-      }
+          item.sub2api_account_id !== accountId ||
+          item.sub2api_status !== accountStatus ||
+          item.sub2api_error_message !== accountErrorMessage
+        ) {
+          updateStmt.run(groupStr, schedulable, accountId, accountStatus, accountErrorMessage, item.id);
+          updatedCount++;
+        }
     }
   });
 
@@ -598,14 +606,16 @@ async function syncSingleKey(keyId, db) {
     }
   }
 
-  db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ? WHERE id = ?')
-    .run(groupStr || null, schedulable, accountId, keyId);
+  db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ?, sub2api_status = ?, sub2api_error_message = ? WHERE id = ?')
+    .run(groupStr || null, schedulable, accountId, accountStatus, accountErrorMessage, keyId);
 
   return {
     success: true,
     groups,
     sub2api_groups: groupStr,
-    sub2api_schedulable: schedulable == null ? null : !!schedulable
+    sub2api_schedulable: schedulable == null ? null : !!schedulable,
+    sub2api_status: accountStatus,
+    sub2api_error_message: accountErrorMessage
   };
 }
 

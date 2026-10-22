@@ -24,9 +24,12 @@ router.get('/settings', (req, res) => {
           if (vf.sub2api_schedulable === undefined) {
             vf.sub2api_schedulable = true;
           }
+          if (vf.sub2api_status === undefined) {
+            vf.sub2api_status = true;
+          }
           settings[r.key] = vf;
         } catch (e) {
-          settings[r.key] = { sub2api_groups: true, sub2api_schedulable: true };
+          settings[r.key] = { sub2api_groups: true, sub2api_schedulable: true, sub2api_status: true };
         }
       } else if (r.key === 'refresh_interval') {
         settings[r.key] = parseInt(r.value, 10) || 300;
@@ -73,7 +76,8 @@ router.get('/usage', (req, res) => {
   try {
     const keys = db.prepare(`
       SELECT id, provider, display_name, team, owner, member_count, sort_order, enabled,
-             sub2api_groups, sub2api_account_id, sub2api_schedulable, created_at
+             sub2api_groups, sub2api_account_id, sub2api_schedulable,
+             sub2api_status, sub2api_error_message, created_at
       FROM api_keys
       WHERE enabled = 1
       ORDER BY sort_order ASC, id ASC
