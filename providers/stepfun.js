@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * StepFun Balance Provider
@@ -7,7 +7,7 @@ const axios = require('axios');
  * Response: { object, type, balance, total_cash_balance, total_voucher_balance }
  */
 async function queryUsage(apiKey, baseUrl) {
-  const response = await axios.get('https://api.stepfun.com/v1/accounts', {
+  const response = await safeGet('https://api.stepfun.com/v1/accounts', {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',

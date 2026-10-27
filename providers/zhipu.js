@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * Zhipu GLM (智谱) Usage Provider
@@ -31,7 +31,7 @@ async function queryUsage(apiKey, baseUrl, extraConfig = {}) {
     if (extraConfig.projectId) headers['bigmodel-project'] = extraConfig.projectId;
   }
 
-  const response = await axios.get(endpoint, {
+  const response = await safeGet(endpoint, {
     headers,
     timeout: 15000
   });

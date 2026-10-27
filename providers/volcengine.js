@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 const crypto = require('crypto');
 
 /**
@@ -111,7 +111,7 @@ async function queryUsage(apiKey, baseUrl, extraConfig = {}) {
     headers['Authorization'] = authorization;
 
     const url = `https://${host}/?Action=${action}&Region=${region}&Version=2024-01-01`;
-    return await axios.get(url, { headers, timeout: 15000 });
+    return await safeGet(url, { headers, timeout: 15000 });
   }
 
   let rawData = null;

@@ -5,4 +5,12 @@ node_modules
 data/
 .env
 .env.local
+.env.*.local
 cc-switch/
+test/
+db/*.db
+db/*.db-shm
+db/*.db-wal
+db/*.db-journal
+db/*backup*
+*.log

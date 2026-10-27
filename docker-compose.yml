@@ -6,18 +6,44 @@ services:
     container_name: quota-dashboard
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - PORT=3000
-      - DB_PATH=/app/data/usage.db
-      - JWT_SECRET=${JWT_SECRET:-super_secret_dev_key_change_me}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DB_PATH: /app/data/usage.db
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CONTROL_TOKEN_SECRET: ${CONTROL_TOKEN_SECRET:?CONTROL_TOKEN_SECRET is required}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET:?AUDIT_HASH_SECRET is required}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?DATA_ENCRYPTION_KEY is required}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      OUTBOUND_ALLOW_PRIVATE: "false"
+      OUTBOUND_ALLOW_HTTP: "false"
+      SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
+      REFRESH_CONCURRENCY: ${REFRESH_CONCURRENCY:-4}
+      PUBLIC_ACTION_TOKEN_TTL_SECONDS: ${PUBLIC_ACTION_TOKEN_TTL_SECONDS:-900}
     volumes:
-      - ./data:/app/data
+      - quota-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/usage"]
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/settings').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+
+volumes:
+  quota-data:

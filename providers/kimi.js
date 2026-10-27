@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * Kimi For Coding Usage Provider
@@ -12,7 +12,7 @@ async function queryUsage(apiKey, baseUrl) {
   base = base.replace(/\/usages$/i, '');
   const url = /\/v1$/i.test(base) ? `${base}/usages` : `${base}/v1/usages`;
 
-  const response = await axios.get(url, {
+  const response = await safeGet(url, {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'User-Agent': 'QuotaDashboard/1.0'

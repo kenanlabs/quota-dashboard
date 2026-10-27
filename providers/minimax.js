@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * MiniMax Usage Provider
@@ -12,7 +12,7 @@ async function queryUsage(apiKey, baseUrl) {
     endpoint = 'https://api.minimax.io/v1/api/openplatform/coding_plan/remains';
   }
 
-  const response = await axios.get(endpoint, {
+  const response = await safeGet(endpoint, {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'User-Agent': 'cc-switch/1.0'

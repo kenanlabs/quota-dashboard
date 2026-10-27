@@ -4,7 +4,7 @@ AI 模型 API Key 用量与配额监控平台。
 
 ## 关键约定
 
-- 前端使用 **Alpine.js** + **Tailwind CSS**（CDN 加载）
+- 前端使用 **Alpine.js + 预编译 Tailwind CSS**，静态资源全部自托管、禁止外部 CDN
 - 供应商命名参考 CC Switch：Kimi For Coding、Zhipu GLM (智谱)、MiniMax、火山方舟 (Volcengine)
 - 供应商用量查询参考 `cc-switch/src-tauri/src/services/coding_plan.rs` 的实现逻辑
 - 数据库使用 SQLite（better-sqlite3），数据存储于 `db/usage.db`
@@ -21,8 +21,10 @@ docker compose up -d    # Docker 部署
 ## 项目结构
 
 - `server.js` - Express 服务入口
-- `routes/api.js` - 公开 API 路由
-- `routes/admin.js` - 管理员 API 路由（JWT 保护）
+- `config.js` - 启动时强校验安全配置，禁止默认密钥
+- `routes/api.js` - 公开只读 API 与短期能力令牌控制
+- `routes/admin.js` - 管理员 API（HttpOnly Cookie + CSRF）
+- `services/` - 加密、审计、刷新队列、SSRF 防护、公开控制策略
 - `providers/` - 各供应商用量查询适配器
 - `public/index.html` - 前端页面（Alpine.js 单页应用）
 - `db/schema.js` - SQLite 数据库初始化

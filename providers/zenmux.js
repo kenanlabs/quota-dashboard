@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * ZenMux Usage Provider
@@ -12,7 +12,7 @@ async function queryUsage(apiKey, baseUrl) {
 
   const url = baseUrl.replace(/\/$/, '');
 
-  const response = await axios.get(url, {
+  const response = await safeGet(url, {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',

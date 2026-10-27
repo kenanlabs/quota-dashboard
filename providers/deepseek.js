@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * DeepSeek Balance Provider
@@ -7,7 +7,7 @@ const axios = require('axios');
  * Response: { balance_infos: [{ currency, total_balance, granted_balance, topped_up_balance }], is_available }
  */
 async function queryUsage(apiKey, baseUrl) {
-  const response = await axios.get('https://api.deepseek.com/user/balance', {
+  const response = await safeGet('https://api.deepseek.com/user/balance', {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',

@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * OpenRouter Balance Provider
@@ -7,7 +7,7 @@ const axios = require('axios');
  * Response: { data: { total_credits, total_usage } }
  */
 async function queryUsage(apiKey, baseUrl) {
-  const response = await axios.get('https://openrouter.ai/api/v1/credits', {
+  const response = await safeGet('https://openrouter.ai/api/v1/credits', {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',

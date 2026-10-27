@@ -1,17 +1,35 @@
-const jwt = require('jsonwebtoken');
+const db = require('../db/schema');
+const { ADMIN_COOKIE, verifyAdminToken } = require('../services/adminAuth');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_dev_key_change_me';
+function authenticateRequest(req) {
+  const token = req.cookies?.[ADMIN_COOKIE];
+  if (!token) return null;
+
+  const decoded = verifyAdminToken(token);
+  if (typeof decoded.csrf !== 'string' || decoded.csrf.length < 20) return null;
+  const admin = db.prepare('SELECT id, username, token_version FROM admins WHERE id = ?')
+    .get(decoded.id);
+  if (!admin || admin.username !== decoded.username || admin.token_version !== decoded.ver) {
+    return null;
+  }
+  return {
+    admin: {
+      id: admin.id,
+      username: admin.username,
+      tokenVersion: admin.token_version
+    },
+    authMode: 'cookie',
+    csrfToken: decoded.csrf
+  };
+}
 
 function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token format' });
-  }
-
-  const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.admin = decoded;
+    const auth = authenticateRequest(req);
+    if (!auth) return res.status(401).json({ error: 'Unauthorized' });
+    req.admin = auth.admin;
+    req.authMode = auth.authMode;
+    req.adminCsrfToken = auth.csrfToken;
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
@@ -19,3 +37,4 @@ function authMiddleware(req, res, next) {
 }
 
 module.exports = authMiddleware;
+module.exports.authenticateRequest = authenticateRequest;

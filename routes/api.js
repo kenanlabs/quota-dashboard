@@ -1,124 +1,257 @@
 const express = require('express');
-const router = express.Router();
-const db = require('../db/schema');
 const fs = require('fs');
 const path = require('path');
-const { fetchUsage } = require('../providers');
-const sub2api = require('../services/sub2api');
+const db = require('../db/schema');
+const {
+  ensurePublicSession,
+  requirePublicCsrf,
+  signControlToken,
+  verifyControlToken
+} = require('../services/publicControl');
+const {
+  publicSettings,
+  visibleFields
+} = require('../services/settings');
+const { getSub2apiControlCredentials } = require('../services/sub2api');
+const setAccountSchedulable = require('../services/sub2api').setAccountSchedulable;
+const clearAccountError = require('../services/sub2api').clearAccountError;
+const { enforcePublicControlPolicy } = require('../services/controlPolicy');
+const { withKeyLock } = require('../services/keyedLock');
+const { writeAudit } = require('../services/audit');
+const { errorResponse, badRequest } = require('../services/httpErrors');
+const { apiReadLimiter, publicControlLimiter } = require('../middleware/rateLimits');
+const {
+  publicScheduleSchema,
+  publicRecoverSchema
+} = require('../services/validation');
 
-/**
- * GET /api/settings
- * Get public system settings
- */
-router.get('/settings', (req, res) => {
+const router = express.Router();
+let cachedIcons = null;
+
+function parseOrThrow(schema, value) {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    const err = new Error(result.error.issues[0]?.message || '请求参数无效');
+    err.statusCode = 400;
+    throw err;
+  }
+  return result.data;
+}
+
+function normalizeDate(value) {
+  if (!value) return null;
+  const text = String(value);
+  const normalized = /(?:Z|[+-]\d{2}:\d{2})$/i.test(text)
+    ? text
+    : text.replace(' ', 'T') + 'Z';
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function projectUsage(snapshot, fields) {
+  if (!snapshot) return null;
+  const usage = {};
+  if (fields.usage_5h !== false) {
+    usage.usage_5h = snapshot.usage_5h;
+    if (fields.reset_time !== false) usage.reset_5h = normalizeDate(snapshot.reset_5h);
+  }
+  if (fields.usage_7d !== false) {
+    usage.usage_7d = snapshot.usage_7d;
+    if (fields.reset_time !== false) usage.reset_7d = normalizeDate(snapshot.reset_7d);
+  }
+  if (fields.usage_monthly !== false) {
+    usage.usage_monthly = snapshot.usage_monthly;
+    if (fields.reset_time !== false) usage.reset_monthly = normalizeDate(snapshot.reset_monthly);
+  }
+  usage.balance_remaining = snapshot.balance_remaining;
+  usage.balance_used = snapshot.balance_used;
+  usage.balance_total = snapshot.balance_total;
+  usage.balance_unit = snapshot.balance_unit;
+  if (fields.last_updated !== false) usage.queried_at = normalizeDate(snapshot.queried_at);
+  return usage;
+}
+
+function hasKnownSchedulable(value) {
+  return value === 0 || value === 1 || value === false || value === true;
+}
+
+function publicControlActions(key, fields, controlConfigured) {
+  const actions = [];
+  if (
+    !controlConfigured ||
+    !key.sub2api_account_id ||
+    key.admin_locked ||
+    key.sub2api_status === 'inactive'
+  ) return actions;
+  if (
+    key.public_schedule_control &&
+    fields.sub2api_schedulable !== false &&
+    hasKnownSchedulable(key.sub2api_schedulable)
+  ) {
+    actions.push('schedule');
+  }
+  if (
+    key.public_recover_control &&
+    fields.sub2api_status !== false &&
+    typeof key.sub2api_status === 'string' &&
+    key.sub2api_status !== 'active'
+  ) {
+    actions.push('recover');
+  }
+  return actions;
+}
+
+function loadPublicKey(keyId) {
+  return db.prepare(`
+    SELECT id, provider, display_name, team, owner, member_count, sort_order, enabled,
+           sub2api_groups, sub2api_account_id, sub2api_schedulable,
+           sub2api_status, sub2api_error_message,
+           public_schedule_control, public_recover_control, admin_locked, control_version
+    FROM api_keys
+    WHERE id = ? AND enabled = 1
+  `).get(Number(keyId));
+}
+
+function verifyPublicAction(req, action, key) {
+  let payload;
   try {
-    const rows = db.prepare('SELECT key, value FROM system_settings').all();
-    const settings = {};
-    rows.forEach(r => {
-      if (r.key === 'visible_fields') {
-        try {
-          const vf = JSON.parse(r.value);
-          if (vf.sub2api_groups === undefined) {
-            vf.sub2api_groups = true;
-          }
-          if (vf.sub2api_schedulable === undefined) {
-            vf.sub2api_schedulable = true;
-          }
-          if (vf.sub2api_status === undefined) {
-            vf.sub2api_status = true;
-          }
-          settings[r.key] = vf;
-        } catch (e) {
-          settings[r.key] = { sub2api_groups: true, sub2api_schedulable: true, sub2api_status: true };
-        }
-      } else if (r.key === 'refresh_interval') {
-        settings[r.key] = parseInt(r.value, 10) || 300;
-      } else if (r.key === 'sub2api_api_key') {
-        // 普通接口不暴露完整的 sub2api 管理员 key，仅暴露是否已配置
-        settings['sub2api_configured'] = !!(r.value && r.value.trim());
-      } else {
-        settings[r.key] = r.value;
-      }
-    });
-    res.json({ success: true, data: settings });
+    payload = verifyControlToken(req.body.token, action);
+  } catch (_) {
+    const err = new Error('控制令牌无效或已过期，请刷新页面后重试');
+    err.statusCode = 403;
+    throw err;
+  }
+  if (payload.keyId !== key.id || payload.accountId !== key.sub2api_account_id) {
+    const err = new Error('控制令牌与当前账号不匹配');
+    err.statusCode = 403;
+    throw err;
+  }
+  if (payload.version !== (key.control_version || 0)) {
+    const err = new Error('控制令牌已失效，请刷新页面后重试');
+    err.statusCode = 409;
+    throw err;
+  }
+  if (key.admin_locked) {
+    const err = new Error('该账号已由管理员锁定');
+    err.statusCode = 409;
+    throw err;
+  }
+}
+
+router.get('/settings', apiReadLimiter, (req, res) => {
+  try {
+    return res.json({ success: true, data: publicSettings(db) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorResponse(res, err, 'public.settings');
   }
 });
 
-/**
- * GET /api/icons
- * Get list of available icons in public/icons/
- */
-router.get('/icons', (req, res) => {
+router.get('/icons', apiReadLimiter, (req, res) => {
   try {
-    const iconsDir = path.join(__dirname, '..', 'public', 'icons');
-    const files = fs.readdirSync(iconsDir)
-      .filter(f => /\.(svg|png|jpg|jpeg|webp|ico)$/i.test(f))
-      .sort()
-      .map(f => ({
-        path: '/icons/' + f,
-        name: f.replace(/\.[^.]+$/, '')
-      }));
-    // Also include favicon.svg from root
-    files.unshift({ path: '/favicon.svg', name: 'favicon' });
-    res.json({ success: true, data: files });
+    if (!cachedIcons) {
+      const iconsDir = path.join(__dirname, '..', 'public', 'icons');
+      cachedIcons = fs.readdirSync(iconsDir)
+        .filter(file => /\.(svg|png|jpg|jpeg|webp|ico)$/i.test(file))
+        .sort()
+        .map(file => ({
+          path: '/icons/' + file,
+          name: file.replace(/\.[^.]+$/, '')
+        }));
+      cachedIcons.unshift({ path: '/favicon.svg', name: 'favicon' });
+    }
+    return res.json({ success: true, data: cachedIcons });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorResponse(res, err, 'public.icons');
   }
 });
 
-/**
- * GET /api/usage
- * Get latest usage statistics for all active keys (Public)
- */
-router.get('/usage', (req, res) => {
+router.get('/usage', apiReadLimiter, (req, res) => {
   try {
+    const settings = publicSettings(db);
+    const fields = settings.visible_fields;
+    const controlCredentials = getSub2apiControlCredentials(db);
+    const controlConfigured = !!(controlCredentials.url && controlCredentials.key);
+    const session = ensurePublicSession(req, res);
+    const limit = Math.max(1, Math.min(1000, Number.parseInt(req.query.limit, 10) || 500));
+    const offset = Math.max(0, Math.min(100000, Number.parseInt(req.query.offset, 10) || 0));
+    const total = db.prepare('SELECT COUNT(*) AS count FROM api_keys WHERE enabled = 1').get().count;
     const keys = db.prepare(`
-      SELECT id, provider, display_name, team, owner, member_count, sort_order, enabled,
-             sub2api_groups, sub2api_account_id, sub2api_schedulable,
-             sub2api_status, sub2api_error_message, created_at
-      FROM api_keys
-      WHERE enabled = 1
-      ORDER BY sort_order ASC, id ASC
-    `).all();
+      SELECT k.id, k.provider, k.display_name, k.team, k.owner, k.member_count,
+             k.sort_order, k.enabled, k.sub2api_groups, k.sub2api_account_id,
+             k.sub2api_schedulable, k.sub2api_status, k.sub2api_error_message,
+             k.public_schedule_control, k.public_recover_control,
+             k.admin_locked, k.control_version,
+             s.usage_5h, s.reset_5h, s.usage_7d, s.reset_7d,
+             s.usage_monthly, s.reset_monthly, s.balance_remaining, s.balance_used,
+             s.balance_total, s.balance_unit, s.queried_at
+      FROM api_keys k
+      LEFT JOIN usage_snapshots s ON s.id = (
+        SELECT latest.id FROM usage_snapshots latest
+        WHERE latest.api_key_id = k.id
+        ORDER BY latest.id DESC LIMIT 1
+      )
+      WHERE k.enabled = 1
+      ORDER BY k.sort_order ASC, k.id ASC
+      LIMIT ? OFFSET ?
+    `).all(limit, offset);
 
     const result = keys.map(key => {
-      const snapshot = db.prepare(`
-        SELECT usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly,
-               balance_remaining, balance_used, balance_total, balance_unit, queried_at
-        FROM usage_snapshots
-        WHERE api_key_id = ?
-        ORDER BY id DESC
-        LIMIT 1
-      `).get(key.id);
-
-      if (snapshot && snapshot.queried_at) {
-        snapshot.queried_at = snapshot.queried_at.replace(' ', 'T') + 'Z';
-      }
-
-      const { sub2api_account_id, ...publicKey } = key;
-
+      const snapshot = {
+        usage_5h: key.usage_5h,
+        reset_5h: key.reset_5h,
+        usage_7d: key.usage_7d,
+        reset_7d: key.reset_7d,
+        usage_monthly: key.usage_monthly,
+        reset_monthly: key.reset_monthly,
+        balance_remaining: key.balance_remaining,
+        balance_used: key.balance_used,
+        balance_total: key.balance_total,
+        balance_unit: key.balance_unit,
+        queried_at: key.queried_at
+      };
+      const actions = publicControlActions(key, fields, controlConfigured);
       return {
-        ...publicKey,
-        sub2api_linked: !!sub2api_account_id,
-        usage: snapshot || null
+        id: key.id,
+        provider: key.provider,
+        display_name: fields.display_name === false ? '' : key.display_name,
+        team: fields.team === false ? '' : key.team,
+        owner: fields.owner === false ? '' : key.owner,
+        member_count: fields.member_count === false ? null : key.member_count,
+        sort_order: key.sort_order,
+        enabled: key.enabled,
+        sub2api_linked: !!key.sub2api_account_id,
+        sub2api_groups: fields.sub2api_groups === false ? '' : (key.sub2api_groups || ''),
+        sub2api_schedulable: fields.sub2api_schedulable === false ? null : key.sub2api_schedulable,
+        sub2api_status: fields.sub2api_status === false ? null : key.sub2api_status,
+        sub2api_error_message: '',
+        public_schedule_control: fields.sub2api_schedulable !== false && !!key.public_schedule_control,
+        public_recover_control: fields.sub2api_status !== false && !!key.public_recover_control,
+        control_actions: actions,
+        control_token: actions.length
+          ? signControlToken(key, actions)
+          : null,
+        usage: snapshot.queried_at ? projectUsage(snapshot, fields) : null
       };
     });
 
-    res.json({ success: true, data: result });
+    return res.json({
+      success: true,
+      data: result,
+      csrfToken: session.csrfToken,
+      total,
+      hasMore: offset + result.length < total
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorResponse(res, err, 'public.usage');
   }
 });
 
-/**
- * GET /api/usage/:id/history
- * Get historical snapshots for a specific key (Public)
- */
-router.get('/usage/:id/history', (req, res) => {
+router.get('/usage/:id/history', apiReadLimiter, (req, res) => {
   try {
-    const keyId = req.params.id;
+    const fields = visibleFields(db);
+    const key = db.prepare('SELECT id FROM api_keys WHERE id = ? AND enabled = 1').get(req.params.id);
+    if (!key) return res.status(404).json({ error: 'Key not found' });
+
     const history = db.prepare(`
       SELECT usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly,
              balance_remaining, balance_used, balance_total, balance_unit, queried_at
@@ -126,209 +259,163 @@ router.get('/usage/:id/history', (req, res) => {
       WHERE api_key_id = ?
       ORDER BY id DESC
       LIMIT 100
-    `).all(keyId);
-
-    const formattedHistory = history.map(h => ({
-      ...h,
-      queried_at: h.queried_at ? h.queried_at.replace(' ', 'T') + 'Z' : null
-    }));
-
-    res.json({ success: true, data: formattedHistory });
+    `).all(key.id).map(row => projectUsage(row, fields));
+    return res.json({ success: true, data: history });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorResponse(res, err, 'public.history');
   }
 });
 
-/**
- * POST /api/usage/refresh
- * Public: refresh usage data for all active keys
- */
-router.post('/usage/refresh', async (req, res) => {
+router.post('/usage/:id/sub2api/schedulable', publicControlLimiter, requirePublicCsrf, async (req, res) => {
+  let key = null;
   try {
-    const keys = db.prepare('SELECT * FROM api_keys WHERE enabled = 1').all();
-    const results = [];
-
-    for (const key of keys) {
-      try {
-        const usage = await fetchUsage(key);
-        const bal = usage.balance || {};
-        db.prepare(`
-          INSERT INTO usage_snapshots (
-            api_key_id, usage_5h, reset_5h, usage_7d, reset_7d,
-            usage_monthly, reset_monthly,
-            balance_remaining, balance_used, balance_total, balance_unit,
-            raw_response
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          key.id,
-          usage.usage5h, usage.reset5h,
-          usage.usage7d, usage.reset7d,
-          usage.usageMonthly, usage.resetMonthly,
-          bal.remaining != null ? bal.remaining : null,
-          bal.used != null ? bal.used : null,
-          bal.total != null ? bal.total : null,
-          bal.unit || null,
-          JSON.stringify(usage.raw)
-        );
-        results.push({ id: key.id, status: 'success' });
-      } catch (err) {
-        results.push({ id: key.id, status: 'error', message: err.message });
+    const input = parseOrThrow(publicScheduleSchema, req.body);
+    const keyId = Number(req.params.id);
+    return await withKeyLock(`sub2api:${keyId}`, async () => {
+      key = loadPublicKey(keyId);
+      if (!key) return res.status(404).json({ error: 'Key not found or disabled' });
+      if (!key.public_schedule_control || !key.sub2api_account_id) {
+        return res.status(403).json({ error: '该账号未开放公开调度控制' });
       }
-    }
+      if (key.sub2api_status === 'inactive') {
+        return res.status(409).json({ error: '该账号已被管理员停用，请由管理员处理' });
+      }
+      if (!hasKnownSchedulable(key.sub2api_schedulable)) {
+        return res.status(409).json({ error: '账号调度状态尚未同步，请刷新后重试' });
+      }
+      verifyPublicAction(req, 'schedule', key);
+      const current = !!key.sub2api_schedulable;
+      if (input.expectedState !== undefined && input.expectedState !== current) {
+        return res.status(409).json({ error: '调度状态已被其他访客更新，请刷新后重试' });
+      }
+      if (input.schedulable === current) {
+        return res.json({ success: true, schedulable: current, unchanged: true });
+      }
 
-    // 尝试同步 Sub2API 分组信息（非阻塞）
-    try {
-      await sub2api.syncAllKeys(db);
-    } catch (e) {
-      // 忽略 Sub2API 同步错误，不影响用量刷新
-    }
+      enforcePublicControlPolicy(db, req, key.id, 'schedule');
+      const credentials = getSub2apiControlCredentials(db);
+      if (!credentials.url || !credentials.key) {
+        return res.status(503).json({ error: '公开控制凭证尚未配置' });
+      }
 
-    res.json({ success: true, results });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * POST /api/usage/refresh/:id
- * Public: refresh usage data for a single key
- */
-router.post('/usage/refresh/:id', async (req, res) => {
-  try {
-    const keyId = req.params.id;
-    const key = db.prepare('SELECT * FROM api_keys WHERE id = ? AND enabled = 1').get(keyId);
-    if (!key) {
-      return res.status(404).json({ error: 'Key not found or disabled' });
-    }
-
-    const usage = await fetchUsage(key);
-    const bal = usage.balance || {};
-    db.prepare(`
-      INSERT INTO usage_snapshots (
-        api_key_id, usage_5h, reset_5h, usage_7d, reset_7d,
-        usage_monthly, reset_monthly,
-        balance_remaining, balance_used, balance_total, balance_unit,
-        raw_response
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      key.id,
-      usage.usage5h, usage.reset5h,
-      usage.usage7d, usage.reset7d,
-      usage.usageMonthly, usage.resetMonthly,
-      bal.remaining != null ? bal.remaining : null,
-      bal.used != null ? bal.used : null,
-      bal.total != null ? bal.total : null,
-      bal.unit || null,
-      JSON.stringify(usage.raw)
-    );
-
-    // 尝试同步单个 Key 的 Sub2API 分组
-    try {
-      await sub2api.syncSingleKey(keyId, db);
-    } catch (e) {
-      // 忽略 Sub2API 单个同步错误
-    }
-
-    res.json({ success: true, id: key.id });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * POST /api/usage/:id/sub2api/schedulable
- * Public: enable/disable the Sub2API account scheduling for a key
- */
-router.post('/usage/:id/sub2api/schedulable', async (req, res) => {
-  try {
-    const keyId = req.params.id;
-    const { schedulable } = req.body;
-
-    if (typeof schedulable !== 'boolean') {
-      return res.status(400).json({ error: '无效的调度状态' });
-    }
-
-    const key = db.prepare('SELECT id, sub2api_account_id FROM api_keys WHERE id = ? AND enabled = 1').get(keyId);
-    if (!key) {
-      return res.status(404).json({ error: 'Key not found or disabled' });
-    }
-    if (!key.sub2api_account_id) {
-      return res.status(400).json({ error: '该 Key 未关联 Sub2API 账号' });
-    }
-
-    const urlRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_url'").get();
-    const apiKeyRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_api_key'").get();
-    const sub2apiUrl = urlRow ? urlRow.value.trim() : '';
-    const sub2apiApiKey = apiKeyRow ? apiKeyRow.value.trim() : '';
-
-    if (!sub2apiUrl || !sub2apiApiKey) {
-      return res.status(400).json({ error: '未配置 Sub2API 服务地址或管理员 API Key' });
-    }
-
-    const result = await sub2api.setAccountSchedulable(
-      sub2apiUrl,
-      sub2apiApiKey,
-      key.sub2api_account_id,
-      schedulable
-    );
-
-    db.prepare('UPDATE api_keys SET sub2api_schedulable = ? WHERE id = ?')
-      .run(result.schedulable ? 1 : 0, keyId);
-
-    res.json({ success: true, schedulable: result.schedulable });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * POST /api/usage/:id/sub2api/clear-error
- * Public: clear errors and recover the runtime state of a Sub2API account
- */
-router.post('/usage/:id/sub2api/clear-error', async (req, res) => {
-  try {
-    const keyId = req.params.id;
-
-    const key = db.prepare('SELECT id, sub2api_account_id, sub2api_status, sub2api_schedulable FROM api_keys WHERE id = ?').get(keyId);
-    if (!key) {
-      return res.status(404).json({ error: 'Key not found' });
-    }
-    if (!key.sub2api_account_id) {
-      return res.status(400).json({ error: '该 Key 未关联 Sub2API 账号' });
-    }
-
-    const urlRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_url'").get();
-    const apiKeyRow = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_api_key'").get();
-    const sub2apiUrl = urlRow ? urlRow.value.trim() : '';
-    const sub2apiApiKey = apiKeyRow ? apiKeyRow.value.trim() : '';
-
-    if (!sub2apiUrl || !sub2apiApiKey) {
-      return res.status(400).json({ error: '未配置 Sub2API 服务地址或管理员 API Key' });
-    }
-
-    const result = await sub2api.clearAccountError(
-      sub2apiUrl,
-      sub2apiApiKey,
-      key.sub2api_account_id
-    );
-
-    if (result.status) {
-      const newStatus = result.status || 'active';
-      const newMsg = result.error_message || '';
-      const newSchedulable = result.schedulable == null ? key.sub2api_schedulable : (result.schedulable ? 1 : 0);
-      db.prepare('UPDATE api_keys SET sub2api_status = ?, sub2api_error_message = ?, sub2api_schedulable = ? WHERE id = ?')
-        .run(newStatus, newMsg, newSchedulable, keyId);
-    }
-
-    res.json({
-      success: result.success,
-      status: result.status,
-      error_message: result.error_message,
-      schedulable: result.schedulable,
-      error: result.error
+      const result = await setAccountSchedulable(
+        credentials.url,
+        credentials.key,
+        key.sub2api_account_id,
+        input.schedulable
+      );
+      db.prepare('UPDATE api_keys SET sub2api_schedulable = ? WHERE id = ?')
+        .run(result.schedulable ? 1 : 0, key.id);
+      writeAudit(db, req, {
+        action: 'public.schedule',
+        targetType: 'api_key',
+        targetId: key.id,
+        oldState: { schedulable: current },
+        newState: { schedulable: result.schedulable, credentialMode: credentials.mode },
+        success: true
+      });
+      return res.json({ success: true, schedulable: result.schedulable });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (key) {
+      writeAudit(db, req, {
+        action: 'public.schedule',
+        targetType: 'api_key',
+        targetId: key.id,
+        success: false,
+        errorMessage: err.message
+      });
+    }
+    return errorResponse(res, err, 'public.schedule');
+  }
+});
+
+router.post('/usage/:id/sub2api/clear-error', publicControlLimiter, requirePublicCsrf, async (req, res) => {
+  let key = null;
+  try {
+    const input = parseOrThrow(publicRecoverSchema, req.body);
+    const keyId = Number(req.params.id);
+    return await withKeyLock(`sub2api:${keyId}`, async () => {
+      key = loadPublicKey(keyId);
+      if (!key) return res.status(404).json({ error: 'Key not found or disabled' });
+      if (!key.public_recover_control || !key.sub2api_account_id) {
+        return res.status(403).json({ error: '该账号未开放公开状态恢复' });
+      }
+      verifyPublicAction(req, 'recover', key);
+      if (key.sub2api_status === 'inactive') {
+        return res.status(409).json({ error: '该账号已被管理员停用，请由管理员处理' });
+      }
+      if (key.sub2api_status === 'active') {
+        return res.json({
+          success: true,
+          status: 'active',
+          error_message: '',
+          schedulable: key.sub2api_schedulable,
+          unchanged: true
+        });
+      }
+      if (input.expectedStatus && input.expectedStatus !== key.sub2api_status) {
+        return res.status(409).json({ error: '账号状态已变化，请刷新后重试' });
+      }
+
+      enforcePublicControlPolicy(db, req, key.id, 'recover');
+      const credentials = getSub2apiControlCredentials(db);
+      if (!credentials.url || !credentials.key) {
+        return res.status(503).json({ error: '公开控制凭证尚未配置' });
+      }
+
+      const before = {
+        status: key.sub2api_status,
+        schedulable: key.sub2api_schedulable
+      };
+      const result = await clearAccountError(
+        credentials.url,
+        credentials.key,
+        key.sub2api_account_id,
+        { allowPersistentActivation: false, controlMode: credentials.mode }
+      );
+      db.prepare(`
+        UPDATE api_keys
+        SET sub2api_status = ?, sub2api_error_message = ?, sub2api_schedulable = ?
+        WHERE id = ?
+      `).run(
+        result.status || key.sub2api_status || 'unknown',
+        result.error_message || '',
+        result.schedulable == null ? key.sub2api_schedulable : (result.schedulable ? 1 : 0),
+        key.id
+      );
+      writeAudit(db, req, {
+        action: 'public.recover',
+        targetType: 'api_key',
+        targetId: key.id,
+        oldState: before,
+        newState: {
+          status: result.status,
+          schedulable: result.schedulable,
+          credentialMode: credentials.mode
+        },
+        success: result.success,
+        errorMessage: result.error
+      });
+      return res.json({
+        success: result.success,
+        status: result.status,
+        error_message: result.success ? '' : '账号仍处于异常状态',
+        schedulable: result.schedulable,
+        error: result.success ? undefined : '账号状态未完全恢复，请稍后重试'
+      });
+    });
+  } catch (err) {
+    if (key) {
+      writeAudit(db, req, {
+        action: 'public.recover',
+        targetType: 'api_key',
+        targetId: key.id,
+        success: false,
+        errorMessage: err.message
+      });
+    }
+    return errorResponse(res, err, 'public.recover');
   }
 });
 

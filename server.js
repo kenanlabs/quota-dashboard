@@ -1,123 +1,116 @@
-require('dotenv').config();
+const config = require('./config');
 const express = require('express');
+const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
+const compression = require('compression');
 const path = require('path');
-const cron = require('node-cron');
 const db = require('./db/schema');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
-const { fetchUsage } = require('./providers');
-const sub2api = require('./services/sub2api');
+const { runCoalescedRefresh } = require('./services/refresh');
+const { startScheduler } = require('./services/scheduler');
+const { cleanupAuditLogs } = require('./services/audit');
+const { globalApiLimiter } = require('./middleware/rateLimits');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(express.json());
+if (config.trustProxy !== 0 && config.trustProxy !== '0') {
+  app.set('trust proxy', config.trustProxy);
+}
+app.set('query parser', 'simple');
+app.disable('x-powered-by');
+app.use(compression({ threshold: 1024 }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-eval'"],
+      scriptSrcAttr: ["'none'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameSrc: ["'none'"],
+      workerSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: config.isProduction ? [] : null
+    }
+  },
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  xFrameOptions: { action: 'deny' },
+  referrerPolicy: { policy: 'no-referrer' },
+  strictTransportSecurity: config.isProduction
+    ? { maxAge: 31536000, includeSubDomains: true, preload: false }
+    : false
+}));
+app.use((req, res, next) => {
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  next();
+});
+app.use(cookieParser());
+app.use(express.json({ limit: config.bodyLimit, strict: true }));
+
 app.use(express.static(path.join(__dirname, 'public'), {
-  // HTML 经常内联前端逻辑，强制每次校验，避免浏览器复用旧版本
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  etag: true,
+  maxAge: config.isProduction ? '1h' : 0,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.set('Cache-Control', 'no-cache');
+    }
   }
 }));
 
-// API responses are live dashboard state and should never be reused across reloads.
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
 
-// Routes
+app.use('/api', globalApiLimiter);
 app.use('/api', apiRoutes);
 app.use('/api/admin', adminRoutes);
 
-/**
- * Scheduled job to fetch usage for all enabled API keys
- */
-async function refreshAllUsage() {
-  console.log(`[${new Date().toISOString()}] Starting scheduled usage refresh...`);
-  try {
-    const keys = db.prepare('SELECT * FROM api_keys WHERE enabled = 1').all();
-    for (const key of keys) {
-      try {
-        const usage = await fetchUsage(key);
-        const bal = usage.balance || {};
-        db.prepare(`
-          INSERT INTO usage_snapshots (
-            api_key_id, usage_5h, reset_5h, usage_7d, reset_7d, usage_monthly, reset_monthly,
-            balance_remaining, balance_used, balance_total, balance_unit,
-            raw_response
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          key.id,
-          usage.usage5h, usage.reset5h,
-          usage.usage7d, usage.reset7d,
-          usage.usageMonthly, usage.resetMonthly,
-          bal.remaining != null ? bal.remaining : null,
-          bal.used != null ? bal.used : null,
-          bal.total != null ? bal.total : null,
-          bal.unit || null,
-          JSON.stringify(usage.raw)
-        );
-        console.log(`[OK] Refreshed usage for key: ${key.display_name} (ID: ${key.id})`);
-      } catch (err) {
-        console.error(`[ERROR] Failed to refresh key: ${key.display_name} (ID: ${key.id}):`, err.message);
-      }
-    }
-
-    // 尝试同步 Sub2API 分组信息
-    try {
-      const syncRes = await sub2api.syncAllKeys(db);
-      if (syncRes && syncRes.updatedCount > 0) {
-        console.log(`[OK] Sub2API groups synced: ${syncRes.message}`);
-      }
-    } catch (subErr) {
-      // 忽略 Sub2API 错误
-    }
-  } catch (err) {
-    console.error('[CRITICAL] Refresh job failed:', err.message);
-  }
-}
-
-// Schedule job based on system_settings or default 5 minutes
-let currentCronJob = null;
-
-function scheduleRefreshJob() {
-  try {
-    const setting = db.prepare("SELECT value FROM system_settings WHERE key = 'refresh_interval'").get();
-    const intervalSec = setting ? (parseInt(setting.value, 10) || 300) : 300;
-
-    // Calculate cron pattern or interval
-    let cronPattern = '*/5 * * * *';
-    if (intervalSec < 3600) {
-      const mins = Math.max(1, Math.floor(intervalSec / 60));
-      cronPattern = `*/${mins} * * * *`;
-    } else {
-      const hours = Math.max(1, Math.floor(intervalSec / 3600));
-      cronPattern = `0 */${hours} * * *`;
-    }
-
-    if (currentCronJob) {
-      currentCronJob.stop();
-    }
-
-    currentCronJob = cron.schedule(cronPattern, () => {
-      refreshAllUsage();
-    });
-    console.log(`Usage refresh scheduled with pattern: ${cronPattern} (interval: ${intervalSec}s)`);
-  } catch (err) {
-    console.error('Failed to schedule refresh job:', err.message);
-  }
-}
-
-scheduleRefreshJob();
-
-// Start Server
-app.listen(PORT, () => {
-  console.log(`==================================================`);
-  console.log(`QuotaDashboard running on port ${PORT}`);
-  console.log(`URL: http://localhost:${PORT}`);
-  console.log(`==================================================`);
-
-  // Initial refresh on startup if there are keys
-  refreshAllUsage();
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found' });
 });
+
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  console.error('[HTTP]', err && err.stack ? err.stack : err);
+  const status = Number(err && (err.statusCode || err.status)) || 500;
+  return res.status(status).json({
+    error: status === 413
+      ? '请求体过大'
+      : (status < 500 ? (err.message || '请求失败') : '服务器内部错误')
+  });
+});
+
+const server = app.listen(config.port, config.host, () => {
+  console.log(`QuotaDashboard listening on http://${config.host}:${config.port}`);
+});
+server.requestTimeout = 30_000;
+server.headersTimeout = 15_000;
+server.keepAliveTimeout = 5_000;
+server.timeout = 35_000;
+server.maxHeadersCount = 100;
+server.maxRequestsPerSocket = 1_000;
+
+startScheduler(db);
+runCoalescedRefresh(db).catch(err => {
+  console.error('[STARTUP] Initial refresh failed:', err.message);
+});
+cleanupAuditLogs(db);
+
+function shutdown(signal) {
+  console.log(`Received ${signal}, shutting down`);
+  server.close(() => {
+    db.close();
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));

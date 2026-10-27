@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * Novita AI Balance Provider
@@ -8,7 +8,7 @@ const axios = require('axios');
  * Amount unit: 0.0001 USD → divide by 10000
  */
 async function queryUsage(apiKey, baseUrl) {
-  const response = await axios.get('https://api.novita.ai/v3/user/balance', {
+  const response = await safeGet('https://api.novita.ai/v3/user/balance', {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',

@@ -1,55 +1,50 @@
-# =============================================
-# Stage 1: Build & Install Dependencies
-# =============================================
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 
-# 使用淘宝 npm 镜像源
-RUN npm config set registry https://registry.npmmirror.com
-
-# 安装 better-sqlite3 编译所需工具（使用国内 apt 镜像源）
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
-    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
-    apt-get update -qq && apt-get install -y -qq python3 make g++ gcc > /dev/null && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && \
+    apt-get install -y -qq python3 make g++ gcc > /dev/null && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# 先复制依赖配置文件，利用 Docker 缓存
 COPY package.json package-lock.json ./
-
-# 安装依赖
 RUN npm ci
+COPY tailwind.config.js ./
+COPY src/ ./src/
+COPY public/ ./public/
+RUN npm run build:css && \
+    mkdir -p public/vendor && \
+    cp node_modules/alpinejs/dist/cdn.min.js public/vendor/alpine.min.js
 
-# =============================================
-# Stage 2: Production Image
-# =============================================
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim AS production-deps
+
+RUN apt-get update -qq && \
+    apt-get install -y -qq python3 make g++ gcc > /dev/null && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
-# 使用淘宝 npm 镜像源（生产阶段保留）
-RUN npm config set registry https://registry.npmmirror.com
+FROM node:24-bookworm-slim
 
-# 仅复制运行时所需文件
-COPY --from=builder /app/node_modules ./node_modules
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY --from=production-deps /app/node_modules ./node_modules
 COPY package.json ./
-COPY .env.example .env
-COPY server.js ./
-COPY db/ ./db/
+COPY config.js server.js ./
+COPY db/schema.js ./db/schema.js
 COPY routes/ ./routes/
 COPY providers/ ./providers/
 COPY middleware/ ./middleware/
 COPY services/ ./services/
-COPY public/ ./public/
+COPY --from=builder /app/public ./public
 
-# 创建数据目录
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chown -R node:node /app
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -sf http://localhost:3000/api/usage > /dev/null || exit 1
-
-# 暴露端口
+USER node
 EXPOSE 3000
 
-# 启动服务
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/settings').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 CMD ["node", "server.js"]

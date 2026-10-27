@@ -1,4 +1,14 @@
-const axios = require('axios');
+const { safeDelete, safeGet, safePost, safePut } = require('./safeHttp');
+const { decryptSecret, encryptSecret } = require('./crypto');
+const config = require('../config');
+const { mapWithConcurrency } = require('./concurrency');
+const {
+  SUB2API_ADMIN_KEY,
+  SUB2API_CONTROL_KEY,
+  SUB2API_URL,
+  getSetting,
+  sub2apiControlMode
+} = require('./settings');
 
 /**
  * 规范化 Base URL
@@ -22,7 +32,6 @@ function getAuthHeaders(apiKey) {
   };
   if (apiKey) {
     headers['x-api-key'] = apiKey.trim();
-    headers['Authorization'] = `Bearer ${apiKey.trim()}`;
   }
   return headers;
 }
@@ -49,6 +58,23 @@ function detectProvider(acc, apiKey, baseUrl) {
   return platform || 'openai';
 }
 
+function getSub2apiAdminCredentials(db) {
+  return {
+    url: getSetting(db, SUB2API_URL) || '',
+    key: getSetting(db, SUB2API_ADMIN_KEY) || ''
+  };
+}
+
+function getSub2apiControlCredentials(db) {
+  const controlKey = getSetting(db, SUB2API_CONTROL_KEY) || '';
+  const adminKey = getSetting(db, SUB2API_ADMIN_KEY) || '';
+  return {
+    url: getSetting(db, SUB2API_URL) || '',
+    key: controlKey || adminKey,
+    mode: sub2apiControlMode(controlKey, adminKey)
+  };
+}
+
 /**
  * 测试与 Sub2API 的连接
  * @param {string} rawUrl 
@@ -66,7 +92,7 @@ async function testConnection(rawUrl, apiKey) {
 
   const headers = getAuthHeaders(apiKey);
   try {
-    const res = await axios.get(`${baseUrl}/api/v1/admin/groups/all`, {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/groups/all`, {
       params: { include_inactive: true },
       headers,
       timeout: 10000
@@ -111,45 +137,55 @@ async function testConnection(rawUrl, apiKey) {
 /**
  * 获取 Sub2API 完整元数据（分组列表、账号列表及下游API Key列表）
  */
-async function fetchSub2apiData(rawUrl, apiKey) {
+async function fetchSub2apiData(rawUrl, apiKey, options = {}) {
   const baseUrl = normalizeUrl(rawUrl);
   if (!baseUrl || !apiKey) {
     return null;
   }
 
   const headers = getAuthHeaders(apiKey);
+  const includeCredentials = options.includeCredentials === true;
 
   // 1. 获取所有分组
   let groups = [];
+  let groupsLoaded = false;
   try {
-    const res = await axios.get(`${baseUrl}/api/v1/admin/groups/all`, {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/groups/all`, {
       params: { include_inactive: true },
       headers,
       timeout: 10000
     });
     if (res.data && Array.isArray(res.data)) {
       groups = res.data;
+      groupsLoaded = true;
     } else if (res.data && Array.isArray(res.data.data)) {
       groups = res.data.data;
+      groupsLoaded = true;
     } else if (res.data && Array.isArray(res.data.items)) {
       groups = res.data.items;
+      groupsLoaded = true;
     }
   } catch (e) {
     // 降级尝试分页分组列表
     try {
-      const res = await axios.get(`${baseUrl}/api/v1/admin/groups`, {
+      const res = await safeGet(`${baseUrl}/api/v1/admin/groups`, {
         params: { page: 1, page_size: 200 },
         headers,
         timeout: 10000
       });
       if (res.data && Array.isArray(res.data.items)) {
         groups = res.data.items;
+        groupsLoaded = true;
       } else if (res.data && Array.isArray(res.data.data)) {
         groups = res.data.data;
+        groupsLoaded = true;
       }
     } catch (err2) {
       console.warn('[Sub2API] 获取分组列表失败:', err2.message);
     }
+  }
+  if (!groupsLoaded) {
+    throw new Error('无法获取 Sub2API 分组列表');
   }
 
   // 建立 Group ID -> Group Name 映射表
@@ -160,10 +196,10 @@ async function fetchSub2apiData(rawUrl, apiKey) {
     }
   });
 
-  // 2. 获取上游账号明文凭据 (优先尝试 /accounts/data 导出接口，可获得解密后的完整 api_key)
+  // 2. 仅在明确导入时获取上游明文凭据，常规同步不触发敏感导出接口。
   const credsMap = new Map();
-  try {
-    const res = await axios.get(`${baseUrl}/api/v1/admin/accounts/data`, {
+  if (includeCredentials) try {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/accounts/data`, {
       headers,
       timeout: 12000
     });
@@ -181,14 +217,39 @@ async function fetchSub2apiData(rawUrl, apiKey) {
   // 3. 获取上游账号结构列表 (/accounts 包含准确的 id, group_ids, groups)
   let accounts = [];
   try {
-    const res = await axios.get(`${baseUrl}/api/v1/admin/accounts`, {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/accounts`, {
       params: { lite: 0, page: 1, page_size: 500 },
       headers,
       timeout: 15000
     });
     const data = res.data?.data || res.data;
-    const items = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
-    accounts = items.map(acc => {
+    const firstItems = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
+    const total = data && Number.isFinite(Number(data.total)) ? Number(data.total) : firstItems.length;
+    const pageSize = 500;
+    const pageCount = Math.min(20, Math.max(1, Math.ceil(total / pageSize)));
+    const remainingPages = Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) => index + 2);
+    const remainingResults = await mapWithConcurrency(
+      remainingPages,
+      config.refreshConcurrency,
+      async page => {
+        const pageRes = await safeGet(`${baseUrl}/api/v1/admin/accounts`, {
+          params: { lite: 0, page, page_size: pageSize },
+          headers,
+          timeout: 15000
+        });
+        const pageData = pageRes.data?.data || pageRes.data;
+        return Array.isArray(pageData)
+          ? pageData
+          : (pageData && Array.isArray(pageData.items) ? pageData.items : []);
+      }
+    );
+    const allItems = [firstItems, ...remainingResults].flat();
+    const uniqueItems = Array.from(new Map(
+      allItems
+        .filter(acc => acc && acc.id != null)
+        .map(acc => [String(acc.id), acc])
+    ).values());
+    accounts = uniqueItems.map(acc => {
       // 合并明文凭证
       const fullCreds = credsMap.get((acc.name || '').trim()) || acc.credentials || {};
       return {
@@ -201,33 +262,32 @@ async function fetchSub2apiData(rawUrl, apiKey) {
     });
   } catch (e) {
     console.warn('[Sub2API] 获取账号列表失败:', e.message);
+    throw new Error(`无法获取 Sub2API 账号列表: ${e.message}`);
   }
 
-  // 4. 获取下游 API Keys (遍历各个分组)
-  const groupApiKeys = [];
-  for (const group of groups) {
-    if (!group || !group.id) continue;
-    try {
-      const res = await axios.get(`${baseUrl}/api/v1/admin/groups/${group.id}/api-keys`, {
-        params: { page: 1, page_size: 200 },
-        headers,
-        timeout: 8000
-      });
-      const data = res.data?.data || res.data;
-      const items = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
-      items.forEach(ak => {
-        if (ak) {
-          groupApiKeys.push({
-            ...ak,
-            groupId: group.id,
-            groupName: group.name
-          });
-        }
-      });
-    } catch (e) {
-      // 忽略单个分组 api-keys 列表读取异常
+  // 4. 有限并发获取下游 API Keys，避免大量分组串行等待。
+  const validGroups = groups.filter(group => group && group.id);
+  const groupApiKeyResults = await mapWithConcurrency(
+    validGroups,
+    config.refreshConcurrency,
+    async group => {
+      try {
+        const res = await safeGet(`${baseUrl}/api/v1/admin/groups/${group.id}/api-keys`, {
+          params: { page: 1, page_size: 200 },
+          headers,
+          timeout: 8000
+        });
+        const data = res.data?.data || res.data;
+        const items = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
+        return items
+          .filter(Boolean)
+          .map(ak => ({ ...ak, groupId: group.id, groupName: group.name }));
+      } catch (_) {
+        return [];
+      }
     }
-  }
+  );
+  const groupApiKeys = groupApiKeyResults.flat();
 
   return {
     groups,
@@ -447,7 +507,7 @@ async function setAccountSchedulable(rawUrl, apiKey, accountId, schedulable) {
   };
 
   try {
-    const res = await axios.post(
+    const res = await safePost(
       `${baseUrl}/api/v1/admin/accounts/${id}/schedulable`,
       { schedulable },
       { headers, timeout: 10000 }
@@ -458,7 +518,7 @@ async function setAccountSchedulable(rawUrl, apiKey, accountId, schedulable) {
     // 兼容不支持专用调度接口的旧版 Sub2API，回退到账号更新接口
     if (status === 404 || status === 405) {
       try {
-        const res = await axios.put(
+        const res = await safePut(
           `${baseUrl}/api/v1/admin/accounts/${id}`,
           { schedulable },
           { headers, timeout: 10000 }
@@ -591,7 +651,7 @@ async function fetchAccountById(rawUrl, apiKey, accountId) {
   const id = Number(accountId);
   if (!Number.isFinite(id) || id <= 0) throw new Error('无效的 Sub2API 账号 ID');
 
-  const res = await axios.get(`${baseUrl}/api/v1/admin/accounts/${id}`, {
+  const res = await safeGet(`${baseUrl}/api/v1/admin/accounts/${id}`, {
     headers: getAuthHeaders(apiKey),
     timeout: 10000
   });
@@ -603,9 +663,10 @@ async function fetchAccountById(rawUrl, apiKey, accountId) {
  * @param {string} rawUrl
  * @param {string} apiKey
  * @param {number|string} accountId
+ * @param {{allowPersistentActivation?: boolean, controlMode?: 'scoped'|'full'}} options
  * @returns {Promise<{success: boolean, status: string, error_message: string, error?: string, schedulable: boolean|null}>}
  */
-async function clearAccountError(rawUrl, apiKey, accountId) {
+async function clearAccountError(rawUrl, apiKey, accountId, options = {}) {
   const baseUrl = normalizeUrl(rawUrl);
   if (!baseUrl) throw new Error('Sub2API Base URL 不能为空');
   if (!apiKey) throw new Error('Sub2API 管理员 API Key 不能为空');
@@ -618,6 +679,9 @@ async function clearAccountError(rawUrl, apiKey, accountId) {
   const headers = getAuthHeaders(apiKey);
   let latestAccount = null;
   const recoveryErrors = [];
+  const allowPersistentActivation = options.allowPersistentActivation === true;
+  const controlMode = options.controlMode || sub2apiControlMode(apiKey);
+  const scopedControlKey = controlMode === 'scoped';
 
   const extractAccount = (payload) => {
     const data = payload && payload.data !== undefined ? payload.data : payload;
@@ -643,13 +707,6 @@ async function clearAccountError(rawUrl, apiKey, accountId) {
     }
   };
 
-  // Newer Sub2API versions expose a unified runtime-state recovery endpoint.
-  const recoveredByUnifiedApi = await runRecoveryRequest('统一恢复账号状态', () => axios.post(
-    `${baseUrl}/api/v1/admin/accounts/${id}/recover-state`,
-    {},
-    { headers, timeout: 10000 }
-  ));
-
   const refreshAccount = async () => {
     try {
       latestAccount = await fetchAccountById(baseUrl, apiKey, id) || latestAccount;
@@ -660,30 +717,70 @@ async function clearAccountError(rawUrl, apiKey, accountId) {
 
   await refreshAccount();
   let health = computeAccountHealth(latestAccount);
+  if (!allowPersistentActivation && latestAccount && latestAccount.status === 'inactive') {
+    const err = new Error('该账号已被管理员停用，公开恢复接口不能重新启用');
+    err.statusCode = 409;
+    throw err;
+  }
+  if (health.status === 'active') {
+    return {
+      success: true,
+      status: 'active',
+      error_message: '',
+      schedulable: latestAccount && typeof latestAccount.schedulable === 'boolean'
+        ? latestAccount.schedulable
+        : null
+    };
+  }
 
-  // Compatibility fallback for older versions or persisted limit/error states.
-  if (!recoveredByUnifiedApi || health.status !== 'active') {
-    await runRecoveryRequest('清除账号错误', () => axios.post(
+  if (scopedControlKey) {
+    // Scoped admin keys only allow accounts.read, accounts.status and accounts.recover.
+    // Sub2API's clear-error handler also clears rate limits, model limits and temporary
+    // unschedulable state, so never request other admin-only endpoints with this key.
+    await runRecoveryRequest('清除账号错误与可恢复运行状态', () => safePost(
       `${baseUrl}/api/v1/admin/accounts/${id}/clear-error`,
       {},
       { headers, timeout: 10000 }
     ));
-    await runRecoveryRequest('解除接口限流', () => axios.post(
-      `${baseUrl}/api/v1/admin/accounts/${id}/clear-rate-limit`,
+    await refreshAccount();
+    health = computeAccountHealth(latestAccount);
+  } else {
+    // Newer Sub2API versions expose a unified runtime-state recovery endpoint.
+    const recoveredByUnifiedApi = await runRecoveryRequest('统一恢复账号状态', () => safePost(
+      `${baseUrl}/api/v1/admin/accounts/${id}/recover-state`,
       {},
       { headers, timeout: 10000 }
     ));
-    await runRecoveryRequest('解除临时不可调度', () => axios.delete(
-      `${baseUrl}/api/v1/admin/accounts/${id}/temp-unschedulable`,
-      { headers, timeout: 10000 }
-    ));
-    await refreshAccount();
-    health = computeAccountHealth(latestAccount);
+
+    // Compatibility fallback for older versions or persisted limit/error states.
+    if (!recoveredByUnifiedApi || health.status !== 'active') {
+      await runRecoveryRequest('清除账号错误', () => safePost(
+        `${baseUrl}/api/v1/admin/accounts/${id}/clear-error`,
+        {},
+        { headers, timeout: 10000 }
+      ));
+      await runRecoveryRequest('解除接口限流', () => safePost(
+        `${baseUrl}/api/v1/admin/accounts/${id}/clear-rate-limit`,
+        {},
+        { headers, timeout: 10000 }
+      ));
+      await runRecoveryRequest('解除临时不可调度', () => safeDelete(
+        `${baseUrl}/api/v1/admin/accounts/${id}/temp-unschedulable`,
+        { headers, timeout: 10000 }
+      ));
+      await refreshAccount();
+      health = computeAccountHealth(latestAccount);
+    }
   }
 
   // A persisted inactive/error status may need an explicit account update.
-  if (latestAccount && latestAccount.status && latestAccount.status !== 'active') {
-    await runRecoveryRequest('恢复账号启用状态', () => axios.put(
+  if (
+    allowPersistentActivation &&
+    latestAccount &&
+    latestAccount.status &&
+    latestAccount.status !== 'active'
+  ) {
+    await runRecoveryRequest('恢复账号启用状态', () => safePut(
       `${baseUrl}/api/v1/admin/accounts/${id}`,
       { status: 'active' },
       { headers, timeout: 10000 }
@@ -716,7 +813,7 @@ function formatSub2apiError(err) {
       return `Sub2API 错误(${err.response.status}): ${data.message}`;
     }
     if (err.response.status === 401 || err.response.status === 403) {
-      return `认证失败(${err.response.status}): 管理员 API Key 无效或权限不足`;
+      return `认证失败(${err.response.status}): 管理员或受限管理 API Key 无效、权限不足或来源 IP 未授权`;
     }
     return `Sub2API 请求失败，状态码: ${err.response.status}`;
   }
@@ -731,11 +828,7 @@ function formatSub2apiError(err) {
  * @returns {Promise<{updatedCount: number, totalKeys: number, message: string}>}
  */
 async function syncAllKeys(db) {
-  const urlSetting = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_url'").get();
-  const keySetting = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_api_key'").get();
-
-  const sub2apiUrl = urlSetting ? urlSetting.value.trim() : '';
-  const sub2apiApiKey = keySetting ? keySetting.value.trim() : '';
+  const { url: sub2apiUrl, key: sub2apiApiKey } = getSub2apiAdminCredentials(db);
 
   if (!sub2apiUrl || !sub2apiApiKey) {
     return {
@@ -745,12 +838,14 @@ async function syncAllKeys(db) {
     };
   }
 
-  const sub2apiData = await fetchSub2apiData(sub2apiUrl, sub2apiApiKey);
+  const sub2apiData = await fetchSub2apiData(sub2apiUrl, sub2apiApiKey, { includeCredentials: false });
   if (!sub2apiData) {
     throw new Error('无法获取 Sub2API 数据');
   }
 
-  const keys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable, sub2api_status, sub2api_error_message FROM api_keys WHERE enabled = 1').all();
+  const keys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable, sub2api_status, sub2api_error_message FROM api_keys WHERE enabled = 1')
+    .all()
+    .map(item => ({ ...item, api_key: decryptSecret(item.api_key) }));
   const updateStmt = db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ?, sub2api_status = ?, sub2api_error_message = ? WHERE id = ?');
 
   let updatedCount = 0;
@@ -806,11 +901,7 @@ async function syncAllKeys(db) {
  * @param {object} db 
  */
 async function syncSingleKey(keyId, db) {
-  const urlSetting = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_url'").get();
-  const keySetting = db.prepare("SELECT value FROM system_settings WHERE key = 'sub2api_api_key'").get();
-
-  const sub2apiUrl = urlSetting ? urlSetting.value.trim() : '';
-  const sub2apiApiKey = keySetting ? keySetting.value.trim() : '';
+  const { url: sub2apiUrl, key: sub2apiApiKey } = getSub2apiAdminCredentials(db);
 
   if (!sub2apiUrl || !sub2apiApiKey) {
     throw new Error('未配置 Sub2API 服务地址或管理员 API Key');
@@ -820,8 +911,9 @@ async function syncSingleKey(keyId, db) {
   if (!keyRecord) {
     throw new Error('未找到指定的 API Key');
   }
+  keyRecord.api_key = decryptSecret(keyRecord.api_key);
 
-  const sub2apiData = await fetchSub2apiData(sub2apiUrl, sub2apiApiKey);
+  const sub2apiData = await fetchSub2apiData(sub2apiUrl, sub2apiApiKey, { includeCredentials: false });
   if (!sub2apiData) {
     throw new Error('获取 Sub2API 数据失败');
   }
@@ -866,13 +958,15 @@ async function syncSingleKey(keyId, db) {
  * @returns {Promise<{accounts: Array<object>, groups: Array<object>}>}
  */
 async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
-  const sub2apiData = await fetchSub2apiData(rawUrl, apiKey);
+  const sub2apiData = await fetchSub2apiData(rawUrl, apiKey, { includeCredentials: false });
   if (!sub2apiData) {
     throw new Error('无法连接 Sub2API 或获取账号数据');
   }
 
   const { groupMap, accounts: sub2Accounts, groups } = sub2apiData;
-  const localKeys = db.prepare('SELECT id, provider, display_name, api_key, enabled, sub2api_account_id, sub2api_groups FROM api_keys').all();
+  const localKeys = db.prepare('SELECT id, provider, display_name, api_key, enabled, sub2api_account_id, sub2api_groups FROM api_keys')
+    .all()
+    .map(item => ({ ...item, api_key: decryptSecret(item.api_key) }));
 
   const resultAccounts = sub2Accounts.map(acc => {
     // 映射分组
@@ -896,7 +990,7 @@ async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
 
     let maskedKey = '';
     if (rawKey) {
-      maskedKey = rawKey.length > 10 ? `${rawKey.slice(0, 6)}...${rawKey.slice(-4)}` : `${rawKey.slice(0, 3)}***`;
+      maskedKey = rawKey.length > 8 ? `••••${rawKey.slice(-4)}` : '••••';
     }
 
     // 对比本地导入状态
@@ -923,9 +1017,8 @@ async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
       priority: acc.priority || 50,
       groups: groupNames,
       sub2api_groups: groupNames.join(', '),
-      api_key: rawKey,
-      base_url: baseUrl,
       api_key_masked: maskedKey,
+      credential_available: !!rawKey,
       imported: !!matched,
       local_key_id: matched ? matched.id : null,
       schedulable: typeof acc.schedulable === 'boolean' ? acc.schedulable : null,
@@ -941,31 +1034,53 @@ async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
 }
 
 /**
- * 批量导入 / 更新 Sub2API 账号及分组信息
- * @param {Array<object>} accountsToImport 
- * @param {object} db 
- * @returns {{importedCount: number, updatedCount: number, total: number}}
+ * 根据选中的 Sub2API 账号 ID 在服务端完成导入，浏览器无需接触上游明文凭据。
  */
-function importSub2apiAccounts(accountsToImport, db) {
-  if (!Array.isArray(accountsToImport) || accountsToImport.length === 0) {
-    return { importedCount: 0, updatedCount: 0, total: 0 };
+async function importSub2apiAccountsByIds(rawUrl, apiKey, selections, db) {
+  if (!Array.isArray(selections) || selections.length === 0) {
+    return { importedCount: 0, updatedCount: 0, skippedCount: 0, total: 0 };
+  }
+  const uniqueSelections = [];
+  const seenIds = new Set();
+  for (const selection of selections) {
+    const accountId = Number(selection && (selection.sub2api_account_id || selection.account_id));
+    if (!Number.isFinite(accountId) || accountId <= 0 || seenIds.has(accountId)) continue;
+    seenIds.add(accountId);
+    uniqueSelections.push({ ...selection, sub2api_account_id: accountId });
+  }
+  if (uniqueSelections.length === 0) {
+    return {
+      importedCount: 0,
+      updatedCount: 0,
+      skippedCount: selections.length,
+      total: selections.length
+    };
   }
 
-  const existingKeys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable, enabled FROM api_keys').all();
+  const sub2apiData = await fetchSub2apiData(rawUrl, apiKey, { includeCredentials: true });
+  if (!sub2apiData) {
+    throw new Error('无法连接 Sub2API 或获取账号数据');
+  }
+
+  const { groupMap, accounts } = sub2apiData;
+  const existingKeys = db.prepare('SELECT id, provider, display_name, api_key, base_url, sub2api_account_id, sub2api_schedulable FROM api_keys')
+    .all()
+    .map(item => ({ ...item, api_key: decryptSecret(item.api_key) }));
 
   const insertStmt = db.prepare(`
     INSERT INTO api_keys (
       provider, display_name, api_key, base_url, team, owner, member_count, sort_order, enabled,
-      sub2api_account_id, sub2api_groups, sub2api_schedulable
-    ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+      sub2api_account_id, sub2api_groups, sub2api_schedulable,
+      public_schedule_control, public_recover_control
+    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0)
   `);
 
   const updateStmt = db.prepare(`
     UPDATE api_keys SET
       display_name = ?,
       provider = ?,
-      api_key = CASE WHEN ? != '' THEN ? ELSE api_key END,
-      base_url = CASE WHEN ? != '' THEN ? ELSE base_url END,
+      api_key = ?,
+      base_url = ?,
       sub2api_groups = ?,
       enabled = ?,
       sub2api_account_id = ?,
@@ -975,52 +1090,89 @@ function importSub2apiAccounts(accountsToImport, db) {
 
   let importedCount = 0;
   let updatedCount = 0;
+  let skippedCount = 0;
 
   const tx = db.transaction((list) => {
-    for (const item of list) {
-      const isEnabled = (item.enabled === 1 || item.enabled === true || item.enabled === '1') ? 1 : 0;
-      const accId = item.sub2api_account_id ? Number(item.sub2api_account_id) : null;
-      const name = item.name || item.display_name || `Sub2API-${accId}`;
-      const provider = (item.detected_provider || item.provider || item.platform || 'openai').toLowerCase();
-      const apiKeyVal = item.api_key ? item.api_key.trim() : '';
-      const baseUrlVal = item.base_url ? item.base_url.trim() : '';
-      const groupsStr = item.sub2api_groups || (Array.isArray(item.groups) ? item.groups.join(', ') : '');
-      const teamVal = item.team || 'Sub2API';
-      const ownerVal = item.owner || 'Sub2API';
-
-      // 查找是否已存在
-      let matched = null;
-      if (accId) {
-        matched = existingKeys.find(k => k.sub2api_account_id === accId);
+    for (const selection of list) {
+      const accId = Number(selection.sub2api_account_id || selection.account_id);
+      if (!Number.isFinite(accId) || accId <= 0) {
+        skippedCount++;
+        continue;
       }
+      const acc = accounts.find(item => item && Number(item.id) === accId);
+      if (!acc) {
+        skippedCount++;
+        continue;
+      }
+
+      const isEnabled = (selection.enabled === 1 || selection.enabled === true || selection.enabled === '1') ? 1 : 0;
+      const name = acc.name || `Sub2API-${accId}`;
+      const creds = acc.credentials || {};
+      const apiKeyVal = String(creds.api_key || creds.token || creds.access_token || '').trim();
+      const baseUrlVal = String(creds.base_url || '').trim();
+      const provider = detectProvider(acc, apiKeyVal, baseUrlVal);
+      const groupNames = [];
+      if (Array.isArray(acc.group_ids)) {
+        acc.group_ids.forEach(gid => {
+          if (groupMap.has(gid)) groupNames.push(groupMap.get(gid));
+        });
+      } else if (Array.isArray(acc.groups)) {
+        acc.groups.forEach(group => {
+          if (group && group.name) groupNames.push(group.name);
+        });
+      }
+      const groupsStr = groupNames.join(', ');
+
+      let matched = existingKeys.find(k => k.sub2api_account_id === accId);
       if (!matched && apiKeyVal) {
         matched = existingKeys.find(k => k.api_key && k.api_key.trim() === apiKeyVal);
       }
-      if (!matched && name) {
-        matched = existingKeys.find(k => k.display_name.trim().toLowerCase() === name.trim().toLowerCase());
-      }
 
-      const schedulable = typeof item.schedulable === 'boolean'
-        ? (item.schedulable ? 1 : 0)
+      const schedulable = typeof acc.schedulable === 'boolean'
+        ? (acc.schedulable ? 1 : 0)
         : (matched ? matched.sub2api_schedulable : null);
 
       if (matched) {
-        updateStmt.run(name, provider, apiKeyVal, apiKeyVal, baseUrlVal, baseUrlVal, groupsStr || null, isEnabled, accId, schedulable, matched.id);
+        updateStmt.run(
+          name,
+          provider,
+          encryptSecret(apiKeyVal || matched.api_key),
+          baseUrlVal || matched.base_url || '',
+          groupsStr || null,
+          isEnabled,
+          accId,
+          schedulable,
+          matched.id
+        );
         updatedCount++;
       } else {
-        const finalKey = apiKeyVal || `sub2api_${provider}_${accId || Date.now()}`;
-        insertStmt.run(provider, name, finalKey, baseUrlVal || null, teamVal, ownerVal, isEnabled, accId, groupsStr || null, schedulable);
+        const nextSortOrder = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS value FROM api_keys').get().value || 0;
+        const finalKey = apiKeyVal || `sub2api_${provider}_${accId}`;
+        insertStmt.run(
+          provider,
+          name,
+          encryptSecret(finalKey),
+          baseUrlVal || null,
+          'Sub2API',
+          name,
+          nextSortOrder,
+          isEnabled,
+          accId,
+          groupsStr || null,
+          schedulable
+        );
         importedCount++;
       }
     }
   });
 
-  tx(accountsToImport);
+  tx(uniqueSelections);
 
   return {
     importedCount,
     updatedCount,
-    total: accountsToImport.length
+    skippedCount,
+    total: selections.length
   };
 }
 
@@ -1032,8 +1184,10 @@ module.exports = {
   syncAllKeys,
   syncSingleKey,
   fetchSub2apiAccounts,
-  importSub2apiAccounts,
+  importSub2apiAccountsByIds,
   detectProvider,
+  getSub2apiAdminCredentials,
+  getSub2apiControlCredentials,
   setAccountSchedulable,
   findKeyAccount,
   clearAccountError,

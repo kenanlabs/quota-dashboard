@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../services/safeHttp');
 
 /**
  * SiliconFlow Balance Provider
@@ -11,7 +11,7 @@ async function queryUsage(apiKey, baseUrl) {
   const domain = isIntl ? 'api.siliconflow.com' : 'api.siliconflow.cn';
   const url = `https://${domain}/v1/user/info`;
 
-  const response = await axios.get(url, {
+  const response = await safeGet(url, {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',
