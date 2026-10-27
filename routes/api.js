@@ -283,15 +283,15 @@ router.post('/usage/:id/sub2api/schedulable', async (req, res) => {
 
 /**
  * POST /api/usage/:id/sub2api/clear-error
- * Public: clear the error/rate-limit status of a Sub2API account
+ * Public: clear errors and recover the runtime state of a Sub2API account
  */
 router.post('/usage/:id/sub2api/clear-error', async (req, res) => {
   try {
     const keyId = req.params.id;
 
-    const key = db.prepare('SELECT id, sub2api_account_id, sub2api_status FROM api_keys WHERE id = ? AND enabled = 1').get(keyId);
+    const key = db.prepare('SELECT id, sub2api_account_id, sub2api_status, sub2api_schedulable FROM api_keys WHERE id = ?').get(keyId);
     if (!key) {
-      return res.status(404).json({ error: 'Key not found or disabled' });
+      return res.status(404).json({ error: 'Key not found' });
     }
     if (!key.sub2api_account_id) {
       return res.status(400).json({ error: '该 Key 未关联 Sub2API 账号' });
@@ -312,12 +312,21 @@ router.post('/usage/:id/sub2api/clear-error', async (req, res) => {
       key.sub2api_account_id
     );
 
-    if (result.success && result.status) {
-      db.prepare('UPDATE api_keys SET sub2api_status = ?, sub2api_error_message = ? WHERE id = ?')
-        .run(result.status, '', keyId);
+    if (result.status) {
+      const newStatus = result.status || 'active';
+      const newMsg = result.error_message || '';
+      const newSchedulable = result.schedulable == null ? key.sub2api_schedulable : (result.schedulable ? 1 : 0);
+      db.prepare('UPDATE api_keys SET sub2api_status = ?, sub2api_error_message = ?, sub2api_schedulable = ? WHERE id = ?')
+        .run(newStatus, newMsg, newSchedulable, keyId);
     }
 
-    res.json({ success: result.success, status: result.status, error_message: result.error_message });
+    res.json({
+      success: result.success,
+      status: result.status,
+      error_message: result.error_message,
+      schedulable: result.schedulable,
+      error: result.error
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -473,11 +473,137 @@ async function setAccountSchedulable(rawUrl, apiKey, accountId, schedulable) {
 }
 
 /**
+ * 格式化 Sub2API 日期时间为本地易读中文
+ */
+function formatSub2apiDateTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const h = pad(d.getHours());
+  const min = pad(d.getMinutes());
+  const s = pad(d.getSeconds());
+  return `${y}/${m}/${day} ${h}:${min}:${s}`;
+}
+
+/**
+ * 将 Sub2API 英文/长错误原因压缩为适合看板展示的中文摘要
+ */
+function summarizeSub2apiReason(reason) {
+  const text = String(reason || '').trim();
+  if (!text) return '';
+
+  if (/cn_concurrency_limit|concurrent request/i.test(text)) return '并发请求达到上限';
+  if (/cn_balance_low|余额/i.test(text)) {
+    const match = text.match(/余额\s*(-?\d+(?:\.\d+)?)\s*([A-Za-z]+)?/);
+    if (!match) return '余额不足';
+    const currency = String(match[2] || '').toUpperCase();
+    const currencyLabel = { CNY: '元', USD: '美元', EUR: '欧元' }[currency] || currency;
+    return `余额不足，当前 ${match[1]}${currencyLabel ? ' ' + currencyLabel : ''}`;
+  }
+  if (/upstream transport error|no route to host|connection refused/i.test(text)) return '上游连接失败';
+  if (/unauthorized|authentication|invalid api key|401|403/i.test(text)) return '鉴权失败或密钥无效';
+  if (/timeout|deadline/i.test(text)) return '上游请求超时';
+  if (/quota|rate limit|limit/i.test(text)) return '触发用量限制';
+
+  return text.length > 48 ? `${text.slice(0, 48)}…` : text;
+}
+
+/**
+ * 智能计算 Sub2API 账号的实时健康状态与阻断原因
+ * 综合评估 status、temp_unschedulable_until、rate_limit_reset_at、overload_until、error_message
+ */
+function computeAccountHealth(acc) {
+  if (!acc) return { status: 'unknown', errorMessage: '' };
+
+  const now = Date.now();
+
+  // 1. 临时不可调度 (temp_unschedulable)
+  if (acc.temp_unschedulable_until) {
+    const untilMs = new Date(acc.temp_unschedulable_until).getTime();
+    if (untilMs > now) {
+      const timeStr = formatSub2apiDateTime(acc.temp_unschedulable_until);
+      const summary = summarizeSub2apiReason(acc.temp_unschedulable_reason);
+      return {
+        status: 'temp_unschedulable',
+        errorMessage: `临时不可调度，预计 ${timeStr} 恢复${summary ? `（${summary}）` : ''}`
+      };
+    }
+  }
+
+  // 2. 接口限流 (throttled)
+  if (acc.rate_limit_reset_at) {
+    const untilMs = new Date(acc.rate_limit_reset_at).getTime();
+    if (untilMs > now) {
+      const timeStr = formatSub2apiDateTime(acc.rate_limit_reset_at);
+      return {
+        status: 'throttled',
+        errorMessage: `接口限流，预计 ${timeStr} 解除`
+      };
+    }
+  }
+
+  // 3. 服务过载保护 (overloaded)
+  if (acc.overload_until) {
+    const untilMs = new Date(acc.overload_until).getTime();
+    if (untilMs > now) {
+      const timeStr = formatSub2apiDateTime(acc.overload_until);
+      return {
+        status: 'overloaded',
+        errorMessage: `服务过载，预计 ${timeStr} 恢复`
+      };
+    }
+  }
+
+  // 4. 显式状态非 active
+  if (acc.status && acc.status !== 'active') {
+    return {
+      status: acc.status,
+      errorMessage: acc.error_message || ''
+    };
+  }
+
+  // 5. 显式错误信息
+  if (acc.error_message && acc.error_message.trim()) {
+    return {
+      status: 'error',
+      errorMessage: acc.error_message.trim()
+    };
+  }
+
+  return {
+    status: 'active',
+    errorMessage: ''
+  };
+}
+
+/**
+ * 获取指定 Sub2API 账号的最新状态，用于恢复操作后的真实状态回查
+ */
+async function fetchAccountById(rawUrl, apiKey, accountId) {
+  const baseUrl = normalizeUrl(rawUrl);
+  if (!baseUrl) throw new Error('Sub2API Base URL 不能为空');
+  if (!apiKey) throw new Error('Sub2API 管理员 API Key 不能为空');
+
+  const id = Number(accountId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('无效的 Sub2API 账号 ID');
+
+  const res = await axios.get(`${baseUrl}/api/v1/admin/accounts/${id}`, {
+    headers: getAuthHeaders(apiKey),
+    timeout: 10000
+  });
+  return res.data?.data || res.data || null;
+}
+
+/**
  * 清除 Sub2API 账号的错误/限流状态
  * @param {string} rawUrl
  * @param {string} apiKey
  * @param {number|string} accountId
- * @returns {Promise<{success: boolean, status?: string, error_message?: string}>}
+ * @returns {Promise<{success: boolean, status: string, error_message: string, error?: string, schedulable: boolean|null}>}
  */
 async function clearAccountError(rawUrl, apiKey, accountId) {
   const baseUrl = normalizeUrl(rawUrl);
@@ -490,22 +616,93 @@ async function clearAccountError(rawUrl, apiKey, accountId) {
   }
 
   const headers = getAuthHeaders(apiKey);
+  let latestAccount = null;
+  const recoveryErrors = [];
 
-  try {
-    const res = await axios.post(
+  const extractAccount = (payload) => {
+    const data = payload && payload.data !== undefined ? payload.data : payload;
+    if (data && data.account && typeof data.account === 'object') return data.account;
+    if (data && typeof data === 'object' && (data.id != null || data.status != null || data.schedulable != null)) {
+      return data;
+    }
+    return null;
+  };
+
+  const runRecoveryRequest = async (label, request) => {
+    try {
+      const res = await request();
+      latestAccount = extractAccount(res.data) || latestAccount;
+      return true;
+    } catch (err) {
+      const status = err.response && err.response.status;
+      // Older Sub2API versions may not expose every recovery endpoint.
+      if (status !== 404 && status !== 405) {
+        recoveryErrors.push(`${label}失败: ${formatSub2apiError(err)}`);
+      }
+      return false;
+    }
+  };
+
+  // Newer Sub2API versions expose a unified runtime-state recovery endpoint.
+  const recoveredByUnifiedApi = await runRecoveryRequest('统一恢复账号状态', () => axios.post(
+    `${baseUrl}/api/v1/admin/accounts/${id}/recover-state`,
+    {},
+    { headers, timeout: 10000 }
+  ));
+
+  const refreshAccount = async () => {
+    try {
+      latestAccount = await fetchAccountById(baseUrl, apiKey, id) || latestAccount;
+    } catch (_) {
+      // Keep the most recent recovery response when the follow-up read fails.
+    }
+  };
+
+  await refreshAccount();
+  let health = computeAccountHealth(latestAccount);
+
+  // Compatibility fallback for older versions or persisted limit/error states.
+  if (!recoveredByUnifiedApi || health.status !== 'active') {
+    await runRecoveryRequest('清除账号错误', () => axios.post(
       `${baseUrl}/api/v1/admin/accounts/${id}/clear-error`,
       {},
       { headers, timeout: 10000 }
-    );
-    const data = res.data && res.data.data;
-    return {
-      success: true,
-      status: data && data.status,
-      error_message: data && data.error_message
-    };
-  } catch (err) {
-    throw new Error(formatSub2apiError(err));
+    ));
+    await runRecoveryRequest('解除接口限流', () => axios.post(
+      `${baseUrl}/api/v1/admin/accounts/${id}/clear-rate-limit`,
+      {},
+      { headers, timeout: 10000 }
+    ));
+    await runRecoveryRequest('解除临时不可调度', () => axios.delete(
+      `${baseUrl}/api/v1/admin/accounts/${id}/temp-unschedulable`,
+      { headers, timeout: 10000 }
+    ));
+    await refreshAccount();
+    health = computeAccountHealth(latestAccount);
   }
+
+  // A persisted inactive/error status may need an explicit account update.
+  if (latestAccount && latestAccount.status && latestAccount.status !== 'active') {
+    await runRecoveryRequest('恢复账号启用状态', () => axios.put(
+      `${baseUrl}/api/v1/admin/accounts/${id}`,
+      { status: 'active' },
+      { headers, timeout: 10000 }
+    ));
+    await refreshAccount();
+    health = computeAccountHealth(latestAccount);
+  }
+
+  const schedulable = latestAccount && typeof latestAccount.schedulable === 'boolean'
+    ? latestAccount.schedulable
+    : null;
+
+  return {
+    success: health.status === 'active',
+    status: health.status,
+    error_message: health.errorMessage || (health.status === 'active' ? '' : recoveryErrors[0] || '账号状态仍未恢复正常'),
+    error: health.status === 'active' ? undefined : recoveryErrors[0] || '账号状态仍未恢复正常',
+    schedulable
+  };
 }
 
 /**
@@ -575,9 +772,10 @@ async function syncAllKeys(db) {
         }
       }
 
-      // 兼容不存在状态字段的情况，保持旧数据可读
-      const accountStatus = account && account.status ? account.status : 'unknown';
-      const accountErrorMessage = account && account.error_message ? account.error_message : '';
+      // 综合评估 Sub2API 实时健康度 (含临时不可调度、限流、过载与显式错误)
+      const health = computeAccountHealth(account);
+      const accountStatus = health.status;
+      const accountErrorMessage = health.errorMessage;
 
       // 仅当账号状态发生变化时才认为需要更新同步字段
       if (
@@ -643,8 +841,9 @@ async function syncSingleKey(keyId, db) {
       schedulable = account.schedulable ? 1 : 0;
     }
   }
-  const accountStatus = account && account.status ? account.status : 'unknown';
-  const accountErrorMessage = account && account.error_message ? account.error_message : '';
+  const health = computeAccountHealth(account);
+  const accountStatus = health.status;
+  const accountErrorMessage = health.errorMessage;
 
   db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ?, sub2api_status = ?, sub2api_error_message = ? WHERE id = ?')
     .run(groupStr || null, schedulable, accountId, accountStatus, accountErrorMessage, keyId);
@@ -693,6 +892,7 @@ async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
     const rawKey = creds.api_key || creds.token || creds.access_token || '';
     const baseUrl = creds.base_url || '';
     const detected = detectProvider(acc, rawKey, baseUrl);
+    const health = computeAccountHealth(acc);
 
     let maskedKey = '';
     if (rawKey) {
@@ -717,7 +917,8 @@ async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
       platform: acc.platform,
       detected_provider: detected,
       type: acc.type || 'api_key',
-      status: acc.status || 'active',
+      status: health.status,
+      error_message: health.errorMessage,
       concurrency: acc.concurrency || 3,
       priority: acc.priority || 50,
       groups: groupNames,
@@ -835,5 +1036,7 @@ module.exports = {
   detectProvider,
   setAccountSchedulable,
   findKeyAccount,
-  clearAccountError
+  clearAccountError,
+  computeAccountHealth,
+  fetchAccountById
 };

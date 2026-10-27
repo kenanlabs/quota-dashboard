@@ -13,7 +13,12 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  // HTML 经常内联前端逻辑，强制每次校验，避免浏览器复用旧版本
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  }
+}));
 
 // API responses are live dashboard state and should never be reused across reloads.
 app.use('/api', (req, res, next) => {
