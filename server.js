@@ -15,6 +15,12 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// API responses are live dashboard state and should never be reused across reloads.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 // Routes
 app.use('/api', apiRoutes);
 app.use('/api/admin', adminRoutes);

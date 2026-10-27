@@ -120,10 +120,11 @@ function initDb() {
 
   // Initialize default system settings
   const defaultSettings = {
-    site_title: 'Quota Dashboard',
-    site_description: 'AI 模型 API Key 用量与配额监控',
+    site_title: '大模型配额监控中心',
+    site_description: '多平台 AI 大模型 API Key 用量监控与智能调度',
     site_icon: '/favicon.svg',
     refresh_interval: '300',
+    theme_mode: 'auto',
     sub2api_url: '',
     sub2api_api_key: '',
     visible_fields: JSON.stringify({

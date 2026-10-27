@@ -1,442 +1,161 @@
-# QuotaDashboard 设计系统文档
+# QuotaDashboard 设计系统规范文档
 
-## 1. 视觉主题与氛围
+## 1. 视觉主题与设计哲学
 
-QuotaDashboard 的界面是一个为团队打造的 AI 资源「监控作战室」—— 冷静、克制、信息密度恰到好处。整个体验建立在 Slate 冷灰调画布 (`#f8fafc`) 之上，营造出一种工具型产品特有的专业感与可靠感。不像消费级 AI 产品追求温暖亲和，QuotaDashboard 的设计语言更接近 DevOps 仪表盘：清晰、务实，让数据自己说话。
+QuotaDashboard 是为技术团队打造的 AI 大模型配额与密钥监控「作战室」。整体视觉语言追求**专业、克制、信息高密度与零冗余干扰**。界面全面运行在现代冷灰调（浅色 `#f6f8f7` / 深色 `#0c1613`）之上，以 **Teal 青碧色** (`#0f766e` / 深色 `#4fd1bf`) 作为品牌核心交互主色，辅以微晶玻璃感与轻微环境光晕，传递出理性、健康、可信的技术质感。
 
-标志性的设计语言是以 **Teal 青碧色** (`#0f766e`) 作为品牌主色贯穿所有交互元素 —— 按钮、焦点环、选中态、链接。Teal 介于蓝与绿之间，传递出"理性分析"与"健康运行"的双重信号。配合 Slate 色系的中性灰阶，界面在冷静中保留了层次感。
+### 核心设计原则
+1. **信号轨道唯一性 (Signal Rail Focus)**：全面弃用笨重的网格卡片盒子，统一采用单行横向对齐的「信号轨道」。将密钥身份、配额指标及快捷操作置于同一视线扫描基线，实现一屏多看、快速巡检。
+2. **多模式自适应主题 (Theme System)**：采用 CSS 变量与 `:data-appearance` 机制驱动。默认提供「自适应」（跟随系统）模式，并支持用户在导航栏下拉选择「浅色模式」与「深色模式」，个人偏好持久化存储在客户端。
+3. **统一药丸胶囊导航 (Pill Capsule UI)**：顶部导航栏所有按钮（刷新、排序下拉、主题下拉、设置、添加、退出）统一采用 34px 高度的圆角胶囊药丸设计，形成严谨统一的基线韵律。
+4. **沉浸固定视窗弹窗 (Fixed-Frame Modals)**：弹窗均采用「固定头部 + 隐藏原生滚动条 (`.modal-scroll`) + 固定底部操作栏」结构。无论内容多长，“关闭”与“保存配置”按钮永远停留在视窗底部，用户无需滚动查找。
+5. **三色信号灯语义 (Traffic Light System)**：沿用经典红黄绿信号灯映射：Emerald 安全 (< 50%)、Amber 预警 (50–79%)、Rose 危险 (≥ 80%)，让用量健康度一眼可感知。
+6. **全站中文化与防折行排版**：所有指标、状态标签、倒计时与相对时间全面使用自然中文，账户余额强制采用不换行对齐 (`-0.50 CNY`)。
 
-用量百分比采用**三色信号灯语义**：Emerald 翠绿 (`#059669`) 表示安全区间，Amber 琥珀 (`#d97706`) 表示预警区间，Rose 玫红 (`#e11d48`) 表示危险区间。这种源自交通信号灯的直觉映射，让团队成员无需阅读数字即可一眼感知每个 Key 的健康状态。
+---
 
-**关键特征：**
-- Slate 冷灰画布 (`#f8fafc`) 营造工具型产品的专业感与可靠感
-- Teal 青碧品牌主色 (`#0f766e`) 作为所有交互元素的核心色
-- Inter 字体家族，搭配 `cv02/cv03/cv04/cv11` 风格化变体，呈现现代几何感
-- 三色用量信号灯系统（绿/黄/红）—— 无需阅读即可感知状态
-- 纯白卡片 (`#ffffff`) + 极淡边框 (`#e2e8f0`) + `shadow-sm` 微阴影，构建克制而清晰的层级
-- 毛玻璃遮罩 (`bg-slate-900/50 backdrop-blur-sm`) 为 Modal 提供深度感
-- 搜索框与数据卡片双轨布局，兼顾浏览与精准检索
+## 2. 色彩系统与色彩语义
 
-## 2. 色彩系统与角色
+### CSS 变量定义
 
-### 品牌主色
-- **Teal 青碧** (`#0f766e`): 核心品牌色 — 用于所有主按钮文字、主按钮背景色板、Tab 选中态、焦点环、搜索框聚焦。沉稳而富有区分度，不喧宾夺主。
-- **Teal Light 浅青** (`#dff4f2`): 主按钮的默认背景 — 极淡的青绿底色，让 Teal 文字在按钮上清晰可读。
-- **Teal Hover 悬停青** (`#cbf0ec`): 主按钮悬停态背景。
-- **Teal Active 按下青** (`#b5e9e4`): 主按钮激活态背景。
-- **Teal Border 青边框** (`#b2e8e3`): 主按钮边框色。
+```css
+:root {
+  --q-canvas: #f6f8f7;         /* 页面底色画布 */
+  --q-surface: #ffffff;        /* 容器/卡片表面白 */
+  --q-surface-muted: #f4f7f5;  /* 标签与次级表面色 */
+  --q-line: #e3ece7;           /* 细分割线 */
+  --q-line-strong: #cfdcd5;    /* 强调描边 */
+  --q-ink: #0f1f1b;            /* 主标题与极黑文字 */
+  --q-body: #2f433e;           /* 正文文字 */
+  --q-muted: #647671;          /* 辅助说明文本 */
+  --q-faint: #8d9c97;          /* 弱化时间与图标 */
+  --q-teal: #0f766e;           /* 品牌青碧主色 */
+  --q-teal-soft: #dff4f2;      /* 浅青软背景 */
+  --q-green: #11845f;          /* 安全绿色 */
+  --q-amber: #c97812;          /* 预警黄色 */
+  --q-rose: #c23f58;           /* 危险玫瑰红 */
+  --q-shadow: 0 16px 40px rgba(31, 61, 51, .06);
+}
 
-### 中性色 / 表面色
-- **Slate 50 画布** (`#f8fafc`): 页面主背景 — 带极轻微蓝调的灰白，比纯白多了层次感，比暖灰更适合工具型产品。
-- **White 纯白** (`#ffffff`): 卡片背景、导航栏背景、Modal 背景 — 在 Slate 画布上浮现的纯净表面。
-- **Slate 100 浅灰** (`#f1f5f9`): 标签背景、次要按钮背景、Provider 图标容器背景。
-- **Slate 200 边框** (`#e2e8f0`): 标准卡片/容器边框 — 极淡的存在感，仅用于界定边界。
-- **Slate 300 输入边框** (`#cbd5e1`): 输入框默认边框 — 略深，确保输入区域可辨识。
+body[data-appearance="dark"] {
+  --q-canvas: #0c1613;         /* 深墨黑夜画布 */
+  --q-surface: #13221e;        /* 深色容器表面 */
+  --q-surface-muted: #1b2d28;  /* 深色次级表面 */
+  --q-line: #293d36;           /* 深色柔和描边 */
+  --q-line-strong: #3b5249;    /* 深色强调边框 */
+  --q-ink: #eef6f2;            /* 深色高亮标题白 */
+  --q-body: #c7d5d0;           /* 深色次级文本 */
+  --q-muted: #93a5a0;          /* 深色说明文本 */
+  --q-faint: #71827d;          /* 深色弱化文本 */
+  --q-teal: #4fd1bf;           /* 深色青碧强调光 */
+  --q-teal-soft: rgba(15, 118, 110, .22);
+  --q-green: #48c894;          /* 深色安全绿 */
+  --q-amber: #e8a44a;          /* 深色预警黄 */
+  --q-rose: #f07b90;           /* 深色危险红 */
+  --q-shadow: 0 18px 48px rgba(0, 0, 0, .32);
+}
+```
 
-### 文本色
-- **Slate 900 主文本** (`#0f172a`): 标题、卡片名、重要文字 — 接近黑色但稍柔和。
-- **Slate 800 正文** (`#1e293b`): body 默认文字色。
-- **Slate 700 标签** (`#334155`): 表单标签文字。
-- **Slate 600 次要文本** (`#475569`): 辅助信息、统计数字。
-- **Slate 500 三级文本** (`#64748b`): 副标题、说明文字、搜索框占位符。
-- **Slate 400 四级文本** (`#94a3b8`): 最后更新时间、次要图标色、拖拽手柄色。
-- **Slate 300 禁用文本** (`#cbd5e1`): 空状态图标、禁用态拖拽手柄。
+### 业务状态色阶与行为定义
 
-### 语义色
+| 状态标识 | 中文文案 | 浅色样式 | 深色样式 | 说明与交互行为 |
+|----------|----------|----------|----------|----------------|
+| active | 正常运行 | Emerald 600 / 绿底 | Emerald 300 / 绿底 | 账号正常可调用，调度正常 |
+| throttled | 接口限流 | Rose 700 / 红底 | Rose 300 / 红底 | 触发服务商限流，卡片呈现「解除限流/恢复」按钮 |
+| error | 账号异常 | Rose 700 / 红底 | Rose 300 / 红底 | 密钥失效或调用报错，卡片呈现「解除限流/恢复」按钮 |
+| warning | 用量预警 | Amber 700 / 黄底 | Amber 300 / 黄底 | 额度接近耗尽 |
+| schedulable: 1 | 调度开启 | Emerald 700 胶囊 | Emerald 300 胶囊 | 绿色脉冲圆点 + 开关开，点击可暂停调度 |
+| schedulable: 0 | 调度已关闭 (点击开启) | Amber 700 胶囊 | Amber 300 胶囊 | 琥珀色圆点 + 开关关，点击可立即恢复调度 |
+| enabled: 0 | 后台隐藏 (仅管理员可见) | Rose 700 标签 | Rose 300 标签 | 带有眼睛遮挡图标，表明普通访客不可见 |
 
-#### 用量信号灯
-- **Emerald 安全** (`#059669`): 用量 < 50% — 绿色表示"放心使用"。背景 `#ecfdf5` (Emerald 50)。
-- **Amber 预警** (`#d97706`): 用量 50–79% — 黄色表示"注意用量"。背景 `#fffbeb` (Amber 50)。
-- **Rose 危险** (`#e11d48`): 用量 ≥ 80% — 红色表示"即将耗尽"。背景 `#fff1f2` (Rose 50)。
+---
 
-#### 团队标签
-- **Slate 团队标签**: `bg-slate-100 text-slate-600` — 中性灰，低调标注所属团队。
-- **Indigo 负责人标签**: `bg-indigo-50 text-indigo-600` — 靛蓝色，在团队标签中形成区分。
-- **Amber 人数标签**: `bg-amber-50 text-amber-600` — 暖黄色，温和提示团队规模。
-
-#### 通知与反馈
-- **Emerald 成功**: `bg-emerald-50 border-emerald-200 text-emerald-800` — Toast 成功通知。
-- **Rose 错误**: `bg-rose-50 border-rose-200 text-rose-800` — Toast 错误通知。
-- **Rose 危险按钮**: `text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200` — 删除/退出按钮，警示性操作。
-
-#### 焦点指示
-- **Teal 焦点环**: `focus:ring-2 focus:ring-teal-500 focus:border-teal-500` — 搜索框聚焦。
-- **Indigo 焦点环**: `focus:ring-2 focus:ring-indigo-500` — 表单输入框聚焦。与 Teal 区分，暗示操作上下文不同。
-
-### 渐变色系统
-- QuotaDashboard 的设计**不使用渐变**。界面深度完全通过纯色表面层级、边框和微阴影构建。Slate 画布 → White 卡片 → Slate 标签，层层递进而不依赖渐变。
-
-## 3. 字体与排版
+## 3. 字体与排版标准
 
 ### 字体家族
-- **主字体**: `Inter`，Google Fonts 加载，权重 400 / 500 / 600 / 700
-- **等宽数字**: `Inter` 配合 `font-variant-numeric: tabular-nums`，回退 `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`
-- **系统回退**: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
-- **OpenType 特性**: `cv02`, `cv03`, `cv04`, `cv11` — Inter 的文体变体，优化几何感
-- **字体平滑**: `antialiased` (WebKit) + `grayscale` (Moz)
+- **主字体**：`Inter`, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif；开启 `cv02, cv03, cv04, cv11` 现代变体。
+- **等宽数字**：`num-tabular` (`font-variant-numeric: tabular-nums`)，所有用量百分比、金额数字、倒计时与秒数严格等宽对齐。
 
-### 排版层级
+### 排版层级表
 
-| 角色 | 字体 | 字号 | 字重 | 行高 | 说明 |
-|------|------|------|------|------|------|
-| 页面标题 | Inter | 18px (`text-lg`) | 700 (`font-bold`) | `leading-tight` | 导航栏中的系统名称 |
-| 页面副标题 | Inter | 12px (`text-xs`) | 400 | 默认 | 导航栏中的系统描述 |
-| Modal 标题 | Inter | 16px (`text-base`) | 700 (`font-bold`) | 默认 | 所有弹窗的标题 |
-| 卡片标题 | Inter | 14px (`text-sm`) | 700 (`font-bold`) | 默认 | API Key 展示名称 |
-| 用量百分比 | Inter | 12px (`text-xs`) | 600 (`font-semibold`) | 默认 | 用量数字，tabular-nums |
-| 用量标签 | Inter | 12px (`text-xs`) | 400 | 默认 | "5小时:"、"7天:"、"每月:" |
-| 重置倒计时 | Inter | 11px | 400 | 默认 | tabular-nums，等宽对齐 |
-| 团队标签 | Inter | 11px | 500 (`font-medium`) | 默认 | 卡片上的团队/负责人/人数标签 |
-| 表单标签 | Inter | 12px (`text-xs`) | 500 (`font-medium`) | 默认 | 输入框上方标签 |
-| 按钮文字 | Inter | 12px (`text-xs`) | 500 (`font-medium`) | 默认 | 所有按钮 |
-| Tab 导航 | Inter | 12px (`text-xs`) | 500 / 700 (`font-bold`) | 默认 | 设置面板的 Tab，选中态加粗 |
-| 倒计时数字 | Inter | 12px (`text-xs`) | 400 | 默认 | `font-mono` 等宽数字 |
-| 最后更新时间 | Inter | 12px (`text-xs`) | 400 | 默认 | 卡片的相对时间 |
-| 空状态文字 | Inter | 14px (`text-sm`) | 500 (`font-medium`) | 默认 | 空数据提示标题 |
-| 空状态说明 | Inter | 12px (`text-xs`) | 400 | 默认 | 空数据提示文本 |
-| 加载文字 | Inter | 12px (`text-xs`) | 400 | 默认 | "正在刷新数据..." |
-| Toast 文字 | Inter | 14px (`text-sm`) | 500 (`font-medium`) | 默认 | 通知消息 |
+| 层级角色 | 字号 | 字重 | 示例与排版规则 |
+|----------|------|------|----------------|
+| 导航标题 | 15px | 700 | 大模型配额监控中心（单行不折叠） |
+| 轨道名称 | 15px | 700 | 密钥显示名称，截断省略（truncate） |
+| 轨道指标读数 | 21px | 700 | `30%`, `-0.50 CNY`，tabular-nums，强制单行 |
+| 指标标签 | 11px | 600 | 5小时窗口、7天窗口、账户余额、月度限额 |
+| 重置倒计时 | 10.5px | 400 | `⏱ 4小时55分后重置`、`⏱ 2天1小时后重置` |
+| 胶囊按钮文字 | 12px | 500 | 统一 34px 高度导航药丸内部文本 |
+| 状态/业务标签 | 11px | 600 | 团队名称、负责人、Sub2API分组、运行状态 |
 
-### 排版原则
-- **单一字体家族**: 全站仅使用 Inter，通过字重和字号区分层级，不引入第二字体。这是一种极简主义的排版策略 —— 减少字体加载成本，保证渲染一致性。
-- **tabular-nums 用于数据对齐**: 所有数字（用量百分比、倒计时、人数）使用 `font-variant-numeric: tabular-nums`，确保每个数字占据等宽空间，列表中的数字可以垂直对齐。
-- **Inter OpenType 变体**: `cv02/cv03/cv04/cv11` 开启了 Inter 的文体替代字形，使字体呈现更几何化、更现代的外观，与仪表盘的工具感一致。
-- **字重梯度清晰**: 700（标题）→ 600（数据强调）→ 500（交互元素）→ 400（正文/说明），四个层级各司其职。
-- **中文字体回退链完整**: PingFang SC → Hiragino Sans GB → Microsoft YaHei → Noto Sans CJK SC，覆盖 macOS / iOS / Windows / Linux。
+### 防折行规范
+账户余额在任何视窗宽度下均严格禁止金额与币种换行。采用 `whitespace-nowrap inline-flex items-baseline gap-1` 约束，确保金额 (`296.52`) 与单位 (`CNY`) 永远同行展示。
 
-## 4. 组件样式
+---
 
-### 按钮
+## 4. 核心组件规范
 
-**Teal Primary（主要操作）**
-- 背景: Teal Light (`#dff4f2`)
-- 文字: Teal 青碧 (`#0f766e`)
-- 边框: Teal Border (`#b2e8e3`)
-- 内边距: `px-3.5 py-1.5` (14px × 6px) 或 `px-3 py-1.5` (12px × 6px)
-- 圆角: `rounded-lg` (8px)
-- 阴影: `shadow-sm`
-- 悬停: `#cbf0ec` 背景
-- 按下: `#b5e9e4` 背景
-- 过渡: `transition`
-- 这是全站唯一的 CTA 按钮样式 —— "添加 Key"、"刷新"、"保存"、"登录" 均使用此样式
+### 4.1 顶部导航栏 (Navbar)
+- **高度与定位**：固定吸顶 (`sticky top-0 z-30`)，高度 64px (`h-16`)，背景含 95% 半透明毛玻璃模糊效果。
+- **左侧品牌**：Logo (36×36px, `rounded-xl`) + 站点主标题（单行不折行）。副标题在宽屏 (>= 1280px) 显示，中小屏自动隐藏以保障操作按钮空间。
+- **右侧胶囊控制区**：
+  1. 自动刷新倒计时胶囊 (`nav-pill nav-pill-badge`)：带绿色脉冲呼吸圆点；
+  2. 刷新数据按钮 (`nav-pill`)：带旋转动效；
+  3. 排序下拉 (`nav-pill` + 下拉菜单)：支持默认顺序、5小时用量、7天用量、月度用量；
+  4. 主题模式下拉 (`nav-pill` + 下拉菜单)：支持自适应（默认）、浅色模式、深色模式；
+  5. 细分割线；
+  6. 管理员登录 / 系统设置、添加密钥、退出登录操作组。
 
-**Slate Secondary（次要操作）**
-- 背景: Slate 100 (`#f1f5f9`)
-- 文字: Slate 600 (`#475569`)
-- 内边距: `px-4 py-2` (16px × 8px)
-- 圆角: `rounded-lg` (8px)
-- 悬停: `#e2e8f0` 背景
-- 用于 Modal 中的"取消"、"关闭"按钮
+### 4.2 信号轨道 (Signal Rail)
+- **架构**：全站唯一布局，外层以 20px 圆角大卡片包裹 (`.quota-rail`)，卡片内行与行之间采用细线分隔，悬停时产生 3% Teal 微光。
+- **单行分段**：
+  1. **身份段**：拖拽手柄、供应商 Logo (44px)、密钥名称、团队/负责人、Sub2API 分组标签、健康状态、恢复限流按钮、调度开关胶囊、隐藏标识。
+  2. **指标段**：三列横向指标（5小时窗口 / 7天窗口 / 账户余额或月度限额），带 4px 圆角平滑进度条与重置倒计时。
+  3. **操作段**：最后同步时间、单 Key 刷新按钮、管理员显示/隐藏切换开关、重新同步、编辑、删除。
+- **响应式表现**：
+  - 宽屏 (>= 1100px)：三段纯横向排布；
+  - 中屏 (640px – 1100px)：自适应为紧凑双行排布（上行身份与操作，下行完整指标带）；
+  - 小屏 (< 640px)：指标垂直堆叠，操作栏底部分割。
 
-**Rose Danger（危险操作）**
-- 背景: Rose 50 (`#fff1f2`)
-- 文字: Rose 700 (`#be123c`)
-- 边框: Rose 200 (`#fecdd3`)
-- 内边距: `px-3 py-1.5` (12px × 6px)
-- 圆角: `rounded-lg` (8px)
-- 悬停: `#ffe4e6` 背景
-- 用于"退出"、"修改密码"按钮
+### 4.3 模态框 (Modals)
+- **结构重构**：所有弹窗统一为 `flex flex-col max-h-[85vh] overflow-hidden`。
+- **固定头部**：包含模态框标题与右上角快捷关闭 `×` 按钮；系统设置弹窗的选项卡固定在头部。
+- **内部滚动主体**：采用 `.modal-scroll` 隐藏原生灰色滚动条，内容溢出时在内部平滑滚动。
+- **固定底部操作栏**：底栏带有轻微背景衬底与分割线，“关闭”与“保存配置”/“修改密码”按钮永久固定在视窗内，**打开后绝不需要滚动查找操作按钮**。
+- **防误触遮罩**：遮罩层采用 `@mousedown.self` 判定，选中文本拖拽至遮罩区域绝不误关弹窗。
 
-**Icon Button（图标按钮）**
-- 文字/图标色: Slate 400 (`#94a3b8`)
-- 内边距: `p-1` (4px)
-- 悬停: `text-teal-600`（刷新）、`text-indigo-600`（编辑）、`text-rose-600`（删除）
-- 圆角: `rounded`
-- 用于卡片右上角的三个操作图标（刷新/编辑/删除）
+### 4.4 悬浮 Toast 通知
+- **定位与防遮挡**：统一位于右下角 `fixed bottom-5 right-5 z-[100]`，彻底杜绝遮挡顶部导航栏按钮。
+- **时长与动效**：3 秒自动淡出，支持成功 (Emerald) 与报错 (Rose) 语义。
 
-### 卡片
+### 4.5 加载与空状态
+- **居中微晶加载卡片**：首次加载或初始化时，在主内容区居中呈现微晶质感卡片与青碧色旋转圆环，杜绝文案向页面深处下坠。
+- **增量刷新体验**：已有数据刷新时，列表卡片保持原位稳定，顶部导航与计数栏通过微光脉冲提示，页面不晃动。
 
-**API Key 用量卡片**
-- 背景: White (`#ffffff`)
-- 边框: `1px solid` Slate 200 (`#e2e8f0`)
-- 圆角: `rounded-xl` (12px)
-- 阴影: `shadow-sm`
-- 内边距: `p-4` (16px)
-- 卡片间距: `space-y-4` (16px)
-- 悬停: `hover:border-slate-300`（边框微微加深）
-- 拖拽中: `opacity-40 border-dashed border-teal-400`（半透明+虚线+Teal 提示）
-- 拖拽目标: `border-teal-500 ring-2 ring-teal-200`（Teal 高亮环）
-- 刷新中: `animate-pulse`（柔和的脉冲动画）
-- 布局: `flex flex-col md:flex-row`（移动端纵向堆叠，桌面端横向排列）
+---
 
-**空状态卡片**
-- 背景: White (`#ffffff`)
-- 边框: `border border-slate-200`
-- 圆角: `rounded-2xl` (16px)
-- 阴影: `shadow-sm`
-- 内边距: `py-16` (64px 纵向)
-- 图标: 12×12 Slate 300 色描边 SVG
+## 5. 权限与状态行为准则
 
-**设置面板中的图标选择器**
-- 选中态: `border-teal-500 bg-teal-50 ring-1 ring-teal-300`
-- 默认态: `border-slate-200 hover:border-slate-300 hover:bg-slate-50`
-- 圆角: `rounded-lg` (8px)
-- 内边距: `p-1.5` (6px)
-- 图标尺寸: `w-6 h-6` (24px)
+1. **公开显示 vs 后台隐藏**：
+   - `enabled = 1`：公开显示，所有访客与管理员均可在看板查看。
+   - `enabled = 0`：后台隐藏，普通访客接口不返回，仅登录后的管理员可见，卡片显著标注「后台隐藏 (仅管理员可见)」。
+2. **Sub2API 调度自控**：
+   - 任何访客与管理员均可点击卡片上的调度胶囊直接在「开启」与「关闭」间切换，实现异常分流与人工干预。
+3. **Sub2API 异常与限流一键恢复**：
+   - 只要账号健康状态非正常，卡片即时弹出「解除限流/恢复」按钮，调用后端直接向 Sub2API 申请状态重置。
 
-### Modal（弹窗）
+---
 
-- 背景: White (`#ffffff`)
-- 边框: `border border-slate-100`
-- 圆角: `rounded-2xl` (16px)
-- 阴影: `shadow-xl`
-- 内边距: `p-6` (24px)
-- 最大宽度: `max-w-sm` (384px, 登录) / `max-w-md` (448px, Key 编辑) / `max-w-lg` (512px, 系统设置)
-- 最大高度: `max-h-[90vh] overflow-y-auto`
-- 遮罩层: `bg-slate-900/50 backdrop-blur-sm`（半透明深灰 + 毛玻璃模糊）
-- 关闭行为: `@click.away` 点击遮罩外部关闭
-- 登录 Modal: 居中布局，表单间距 `space-y-3`
-- 编辑 Modal: 表单间距 `space-y-3`，Provider 特定配置区域带彩色边框
-- 设置 Modal: Tab 导航 + 多面板切换
-
-### 输入框
-
-- 背景: White (`#ffffff`)
-- 边框: `1px solid` Slate 300 (`#cbd5e1`)
-- 圆角: `rounded-lg` (8px)
-- 内边距: `px-3 py-2` (12px × 8px)
-- 字号: `text-xs` (12px)
-- 聚焦态 (搜索框): `focus:ring-2 focus:ring-teal-500 focus:border-teal-500`
-- 聚焦态 (表单): `focus:ring-2 focus:ring-indigo-500 focus:outline-none`
-- 搜索框额外: 左侧内嵌 SVG 搜索图标，`pl-9 pr-4` 非对称内边距
-
-**自定义 Select**
-- 外观: `appearance: none` 移除原生样式
-- 下拉箭头: 内联 SVG 背景图，默认 `#94a3b8`，聚焦时变为 `#0f766e`
-- 内边距: `pr-8` 为箭头预留空间
-
-**Checkbox**
-- 圆角: `rounded`
-- 选中色: `text-teal-600`
-- 聚焦环: `focus:ring-teal-500`
-
-### 导航栏
-
-- 背景: White (`#ffffff`)
-- 底部边框: `1px solid` Slate 200 (`#e2e8f0`)
-- 定位: `sticky top-0 z-30`（吸顶，在 Modal 遮罩之下）
-- 高度: `h-16` (64px)
-- 内边距: `px-4 sm:px-6 lg:px-8`
-- 最大宽度: `max-w-7xl` (1280px)，居中
-- 左侧: 系统图标 (40×40, `rounded-xl`, 带 `shadow-sm`) + 标题/副标题
-- 右侧: 自动刷新倒计时胶囊 + 操作按钮组
-
-### 自动刷新倒计时胶囊
-
-- 背景: Slate 100 (`#f1f5f9`)
-- 边框: `border border-slate-200`
-- 圆角: `rounded-full`
-- 内边距: `px-3 py-1.5` (12px × 6px)
-- 字号: `text-xs`
-- 状态点: `w-2 h-2 rounded-full bg-emerald-500 animate-pulse`（绿色脉冲圆点）
-- 数字: `font-mono` 等宽字体
-- 响应式: `hidden sm:flex`（小屏隐藏）
-
-### 用量百分比标签
-
-用量核心组件，展示 API Key 的使用百分比。三色信号灯语义：
-
-| 区间 | 文字色 | 背色 | 含义 |
-|------|--------|------|------|
-| < 50% | Emerald 600 (`#059669`) | Emerald 50 (`#ecfdf5`) | 安全 |
-| 50–79% | Amber 600 (`#d97706`) | Amber 50 (`#fffbeb`) | 预警 |
-| ≥ 80% | Rose 600 (`#e11d48`) | Rose 50 (`#fff1f2`) | 危险 |
-| 无数据 | Slate 400 (`#94a3b8`) | Slate 50 (`#f8fafc`) | 未知 |
-
-- 字号: `text-xs font-semibold`
-- 内边距: `px-1.5 py-0.5` (6px × 2px)
-- 圆角: `rounded`
-- 数字格式: `tabular-nums`，`Math.round()` 取整，后缀 `%`
-
-### 团队信息标签
-
-- 团队标签: `bg-slate-100 text-slate-600` — 灰色，配合人像图标
-- 负责人标签: `bg-indigo-50 text-indigo-600` — 靛蓝，配合单人图标
-- 人数标签: `bg-amber-50 text-amber-600` — 暖黄，配合多人图标
-- 字号: `text-[11px] font-medium`
-- 内边距: `px-1.5 py-0.5` (6px × 2px)
-- 圆角: `rounded` (4px)
-- 图标: 3×3 小 SVG，`mr-0.5` 间距
-
-### Provider 图标容器
-
-- 尺寸: `w-9 h-9` (36×36px)
-- 背景: Slate 100 (`#f1f5f9`)
-- 边框: `border border-slate-200`
-- 圆角: `rounded-lg` (8px)
-- 内边距: `p-1.5` (6px)
-- 图像: `object-contain` 保持比例
-
-### Toast 通知
-
-- 定位: `fixed top-4 right-4 z-[100]`
-- 最大宽度: `max-w-sm`
-- 成功样式: `bg-emerald-50 border-emerald-200 text-emerald-800`
-- 错误样式: `bg-rose-50 border-rose-200 text-rose-800`
-- 圆角: `rounded-xl` (12px)
-- 阴影: `shadow-lg`
-- 内边距: `px-4 py-3`
-- 图标: `w-5 h-5` (20px)，左侧
-- 进入动画: `toast-enter` — 0.25s ease-out，从上方 12px 淡入 + 缩放 0.95→1
-- 退出动画: `toast-leave` — 0.2s ease-in，向上 12px 淡出 + 缩放 1→0.95
-- 自动消失: 3 秒后
-
-### 拖拽手柄
-
-- 图标: 6 点阵 SVG（两组 3 点），`w-4 h-4`
-- 默认色: Slate 400 (`#94a3b8`)，悬停 `#475569`
-- 光标: `cursor-grab`，拖拽中 `active:cursor-grabbing`
-- 禁用态: `opacity-40 text-slate-300 cursor-default`
-- 仅管理员+无搜索过滤时可用
-
-### 加载指示器
-
-**全页加载（首次加载）**
-- 居中布局，`py-20`
-- 旋转环: `rounded-full h-8 w-8 border-4 border-teal-600 border-t-transparent animate-spin`
-- 提示文字: `text-sm text-slate-500`
-
-**行内加载（刷新中）**
-- 旋转 SVG: `w-4 h-4 animate-spin text-teal-600`
-- 提示文字: `text-xs text-teal-600`
-
-**卡片刷新**
-- 卡片整体: `animate-pulse`（柔和脉冲）
-
-**状态点脉冲**
-- `w-2 h-2 rounded-full bg-emerald-500 animate-pulse`（倒计时胶囊中的绿色圆点）
-
-## 5. 布局原则
-
-### 间距系统
-- 基础单位: 4px（Tailwind 默认）
-- 页面水平内边距: `px-4 sm:px-6 lg:px-8` (16px → 24px → 32px)
-- 页面垂直内边距: `py-8 sm:py-10` (32px → 40px)
-- 卡片间距: `space-y-4` (16px)
-- 卡片内部: `p-4` (16px)
-- Modal 内部: `p-6` (24px)
-- 表单间距: `space-y-3` (12px)
-- 按钮组间距: `space-x-2` (8px) 或 `space-x-3` (12px)
-- 用量数据间距: `space-x-4` (16px)
-- 标签间距: `gap-1.5` (6px)
-
-### 网格与容器
-- 最大内容宽度: `max-w-7xl` (1280px)，居中
-- 导航栏: 全宽 sticky 顶栏，内容区 `max-w-7xl` 居中
-- 卡片列表: 单列，`space-y-4` 纵向堆叠
-- 卡片内部: `flex flex-col md:flex-row`（移动端纵向，md 以上横向）
-- 表单: 2 列网格 (`grid grid-cols-2 gap-2`) 用于团队/负责人
-- 设置面板: Tab 切换单面板，字段显隐 2 列 checkbox 网格
-- 图标选择器: `grid grid-cols-6 sm:grid-cols-8` 响应式网格
-
-### 留白哲学
-- **工具型产品克制**: 信息密度适中，不追求奢侈留白也不堆砌数据。卡片间距 16px 提供了足够的呼吸感但不会让页面显得空洞。
-- **数据优先**: 卡片内部布局紧凑（`p-4`），优先保证用量数据在同一视口内可见。
-- **Modal 舒适区**: Modal 内边距 24px，表单间距 12px，营造填写表单的舒适空间。
-
-### 圆角尺度
-
-| 级别 | 值 | 使用场景 |
-|------|-----|----------|
-| 微圆角 | `rounded` (4px) | 标签、用量百分比小标签、图标按钮 |
-| 舒适圆角 | `rounded-lg` (8px) | 按钮、输入框、Select、Provider 图标容器、图标选择器项 |
-| 明显圆角 | `rounded-xl` (12px) | 用量卡片、导航栏图标、Toast 通知 |
-| 大圆角 | `rounded-2xl` (16px) | Modal 弹窗、空状态卡片 |
-| 全圆角 | `rounded-full` | 倒计时胶囊、状态点、加载旋转环 |
-
-### 响应式行为
-
-| 断点 | 宽度 | 关键变化 |
-|------|------|----------|
-| 默认 (Mobile) | < 640px | 卡片纵向堆叠，倒计时胶囊隐藏，搜索框全宽 |
-| `sm` | ≥ 640px | 倒计时胶囊显示，搜索框保持 `max-w-xs` |
-| `md` | ≥ 768px | 卡片内部变为横向布局（信息在左，用量在右） |
-| `lg` | ≥ 1024px | 页面内边距增大到 32px |
-
-## 6. 深度与层级
-
-| 层级 | 处理方式 | 使用场景 |
-|------|----------|----------|
-| 画布层 (Level 0) | 无阴影，Slate 50 背景 | 页面基底 |
-| 浮现层 (Level 1) | `shadow-sm` + `1px solid #e2e8f0` 边框 | 用量卡片、导航栏 |
-| 浮起层 (Level 2) | `shadow-xl` + `1px solid #f1f5f9` 边框 | Modal 弹窗 |
-| 通知层 (Level 3) | `shadow-lg`，`z-[100]` | Toast 通知 |
-| 遮罩层 (Level 4) | `bg-slate-900/50 backdrop-blur-sm`，`z-50` | Modal 遮罩 |
-| 导航层 | `z-30`，`sticky` | 导航栏 |
-| 内容层 | 默认层叠 | 页面内容 |
-
-**阴影哲学**: QuotaDashboard 使用 Tailwind 的语义化阴影，不自定义阴影值。`shadow-sm` 提供最轻微的浮起感（卡片），`shadow-xl` 提供明显的弹窗抬升，`shadow-lg` 用于飘浮的通知。没有使用 `shadow-md`，层级区分简洁明确。
-
-**边框替代阴影**: 大部分层级区分通过边框色而非阴影完成 —— 卡片用 `border-slate-200` 界定边界，Modal 用 `border-slate-100` 柔化边缘。阴影仅在需要"浮起"语义时使用。
-
-## 7. 动画与过渡
-
-### 过渡
-- 按钮: `transition`（全属性过渡，约 150ms）
-- 卡片: `transition`（边框色过渡）
-- 图标选择器: `transition`（边框色过渡）
-
-### 动画
-- 旋转: `animate-spin`（1s 线性无限旋转）— 用于刷新图标和加载环
-- 脉冲: `animate-pulse`（2s 缓入缓出无限脉冲）— 用于卡片刷新状态、状态点
-- Toast 进入: `toast-enter` — 0.25s ease-out，`translateY(-12px)` + `scale(0.95)` → 原位
-- Toast 退出: `toast-leave` — 0.2s ease-in，原位 → `translateY(-12px)` + `scale(0.95)`
-
-### 加载骨架
-- 标题骨架: `h-4 w-24 bg-slate-200 rounded animate-pulse`（系统标题加载中）
-- 副标题骨架: `h-3 w-36 bg-slate-100 rounded animate-pulse`（系统描述加载中）
-
-## 8. Do's and Don'ts
+## 6. Do's and Don'ts
 
 ### Do
-- 使用 Teal 青碧 (`#0f766e`) 作为唯一的品牌交互色 — 按钮、链接、焦点环、选中态
-- 使用 Slate 50 (`#f8fafc`) 作为页面背景 — 工具型产品的冷灰基底
-- 使用 White (`#ffffff`) 作为卡片和 Modal 的背景 — 在 Slate 画布上浮现
-- 使用三色信号灯语义展示用量 — 绿 (< 50%) / 黄 (50-79%) / 红 (≥ 80%)
-- 使用 Inter 单一字体家族 — 通过字重和字号区分层级
-- 使用 `tabular-nums` 展示所有数字 — 用量百分比、倒计时、人数
-- 使用 `shadow-sm` 为卡片提供最轻微的浮起感
-- 使用 `rounded-lg` (8px) 作为标准交互元素圆角
-- 使用 Indigo 焦点环 (`focus:ring-indigo-500`) 区分表单输入框的聚焦态
-- 保持 Slate 色系的中性灰基调 — 不引入暖色调灰
+- 始终保持 Signal Rail 的紧凑横向扫描流，控制垂直行高。
+- 顶部导航栏的所有新增按钮必须继承 `.nav-pill` 样式规范（高度 34px，rounded-full）。
+- 所有数值与重置时间必须包含中文单位，余额必须保证不折行。
+- 弹窗设计必须保留固定头部与固定底部，所有滚动必须限制在主体内部并隐藏原生滚动条。
 
 ### Don't
-- 不要使用 Teal 以外的品牌色作为交互主色 — Teal 是唯一品牌色
-- 不要使用纯黑 (`#000000`) 作为文字色 — 最深文字为 Slate 900 (`#0f172a`)
-- 不要使用纯白 (`#ffffff`) 作为页面背景 — 必须使用 Slate 50
-- 不要使用渐变 — 界面深度通过纯色表面层级构建
-- 不要使用 `shadow-md` 或自定义阴影 — 只用 `shadow-sm` / `shadow-lg` / `shadow-xl`
-- 不要在非数字场景使用 `font-mono` — 等宽字体仅用于 tabular-nums 数字
-- 不要引入第二字体 — Inter 是全站唯一字体
-- 不要使用 `< 4px` 的圆角 — 最小圆角为 `rounded` (4px)
-- 不要在 Slate 色系之外引入暖灰或蓝灰 — 保持 Slate 的一致性
-- 不要使用饱和度过高的颜色 — 即使红色也是 Rose 而非纯 Red
-
-## 9. AI Agent 提示词指南
-
-### 快速色值参考
-- 品牌 CTA: "Teal 青碧 (#0f766e)，背景 #dff4f2"
-- 页面背景: "Slate 50 (#f8fafc)"
-- 卡片表面: "White (#ffffff)"
-- 卡片边框: "Slate 200 (#e2e8f0)"
-- 主文本: "Slate 900 (#0f172a)"
-- 次要文本: "Slate 500 (#64748b)"
-- 安全用量: "Emerald 600 (#059669)，背景 #ecfdf5"
-- 预警用量: "Amber 600 (#d97706)，背景 #fffbeb"
-- 危险用量: "Rose 600 (#e11d48)，背景 #fff1f2"
-
-### 组件提示词示例
-- "创建一个用量卡片在 White (#ffffff) 背景上，使用 `rounded-xl` (12px) 圆角、`shadow-sm` 阴影、`1px solid #e2e8f0` 边框。卡片标题使用 Inter 14px 700 字重 Slate 900 色。用量百分比使用 `text-xs font-semibold tabular-nums`，低于 50% 时用 Emerald 600 文字配 Emerald 50 背景。"
-- "设计一个 Teal 主题的主按钮，使用 `#dff4f2` 背景、`#0f766e` 文字、`#b2e8e3` 边框。`rounded-lg` (8px) 圆角，`px-3.5 py-1.5` 内边距，`shadow-sm` 阴影。悬停时背景变为 `#cbf0ec`，按下时变为 `#b5e9e4`。"
-- "创建一个 Modal 弹窗在 White (#ffffff) 背景上，使用 `rounded-2xl` (16px) 圆角、`shadow-xl` 阴影、`border border-slate-100`。遮罩层使用 `bg-slate-900/50 backdrop-blur-sm`。Modal 内边距 `p-6` (24px)，标题用 Inter 16px 700 字重。"
-- "构建一个搜索输入框，使用 `w-full` 宽度、`pl-9 pr-4 py-1.5` 非对称内边距、`text-xs` 字号、`border border-slate-300` 默认边框。聚焦时使用 `focus:ring-2 focus:ring-teal-500 focus:border-teal-500`。左侧嵌入 SVG 搜索图标，Slate 400 色。"
-- "设计一个团队信息标签系统：团队标签用 `bg-slate-100 text-slate-600`，负责人标签用 `bg-indigo-50 text-indigo-600`，人数标签用 `bg-amber-50 text-amber-600`。所有标签使用 `text-[11px] font-medium` 字号、`px-1.5 py-0.5` 内边距、`rounded` (4px) 圆角。"
-
-### 迭代指南
-1. 一次聚焦一个组件
-2. 引用具体色值名称 — "使用 Teal 青碧 (#0f766e)" 而非 "用青色"
-3. 始终指定 Slate 色系的具体色阶 — 不同色阶有明确角色
-4. 明确描述 Inter 字体的字重和字号 — "Inter 14px 700 字重"
-5. 对于阴影，使用语义化命名 — "`shadow-sm`" 而非 "加一点阴影"
-6. 指定背景色 — "在 Slate 50 (#f8fafc) 上" 或 "在 White (#ffffff) 上"
-7. 用量百分比必须遵守三色信号灯语义 — 绿 (< 50%) / 黄 (50-79%) / 红 (≥ 80%)
+- 不要恢复双列配额甲板 (Deck) 布局。
+- 不要让 Toast 弹窗放置在顶部右侧遮挡控制按钮。
+- 不要使用原生深灰色滚动条。
+- 不要使用英文缩写展示核心业务状态（如避免使用 "ACTIVE", "5H WINDOW" 等）。

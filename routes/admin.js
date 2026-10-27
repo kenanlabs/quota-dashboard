@@ -411,6 +411,7 @@ router.put('/settings', (req, res) => {
   try {
     const {
       site_title, site_description, site_icon, refresh_interval, visible_fields,
+      theme_mode,
       sub2api_url, sub2api_api_key
     } = req.body;
 
@@ -424,6 +425,9 @@ router.put('/settings', (req, res) => {
       if (site_description !== undefined) upsertStmt.run('site_description', String(site_description));
       if (site_icon !== undefined) upsertStmt.run('site_icon', String(site_icon));
       if (refresh_interval !== undefined) upsertStmt.run('refresh_interval', String(refresh_interval));
+      if (theme_mode !== undefined) {
+        upsertStmt.run('theme_mode', ['light', 'dark', 'auto'].includes(theme_mode) ? theme_mode : 'auto');
+      }
       if (visible_fields !== undefined) upsertStmt.run('visible_fields', typeof visible_fields === 'object' ? JSON.stringify(visible_fields) : String(visible_fields));
       if (sub2api_url !== undefined) upsertStmt.run('sub2api_url', String(sub2api_url));
       if (sub2api_api_key !== undefined) upsertStmt.run('sub2api_api_key', String(sub2api_api_key));

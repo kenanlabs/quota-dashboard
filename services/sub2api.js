@@ -563,32 +563,33 @@ async function syncAllKeys(db) {
       const groupStr = groups.length > 0 ? groups.join(', ') : null;
 
       const match = findKeyAccount(item, sub2apiData);
+      const account = match ? match.account : null;
       let schedulable = item.sub2api_schedulable;
       let accountId = item.sub2api_account_id;
-      if (match) {
+      if (account) {
         if (accountId == null && match.strength >= 3) {
-          accountId = match.account.id;
+          accountId = account.id;
         }
-        if (typeof match.account.schedulable === 'boolean') {
-          schedulable = match.account.schedulable ? 1 : 0;
+        if (typeof account.schedulable === 'boolean') {
+          schedulable = account.schedulable ? 1 : 0;
         }
       }
 
-        // 兼容不存在状态字段的情况，保持旧数据可读
-        const accountStatus = acc.status || 'unknown';
-        const accountErrorMessage = acc.error_message || '';
+      // 兼容不存在状态字段的情况，保持旧数据可读
+      const accountStatus = account && account.status ? account.status : 'unknown';
+      const accountErrorMessage = account && account.error_message ? account.error_message : '';
 
-        // 仅当账号状态发生变化时才认为需要更新同步字段
-        if (
-          item.sub2api_groups !== groupStr ||
-          item.sub2api_schedulable !== schedulable ||
-          item.sub2api_account_id !== accountId ||
-          item.sub2api_status !== accountStatus ||
-          item.sub2api_error_message !== accountErrorMessage
-        ) {
-          updateStmt.run(groupStr, schedulable, accountId, accountStatus, accountErrorMessage, item.id);
-          updatedCount++;
-        }
+      // 仅当账号状态发生变化时才认为需要更新同步字段
+      if (
+        item.sub2api_groups !== groupStr ||
+        item.sub2api_schedulable !== schedulable ||
+        item.sub2api_account_id !== accountId ||
+        item.sub2api_status !== accountStatus ||
+        item.sub2api_error_message !== accountErrorMessage
+      ) {
+        updateStmt.run(groupStr, schedulable, accountId, accountStatus, accountErrorMessage, item.id);
+        updatedCount++;
+      }
     }
   });
 
@@ -631,16 +632,19 @@ async function syncSingleKey(keyId, db) {
   const groupStr = groups.length > 0 ? groups.join(', ') : '';
 
   const match = findKeyAccount(keyRecord, sub2apiData);
+  const account = match ? match.account : null;
   let schedulable = keyRecord.sub2api_schedulable;
   let accountId = keyRecord.sub2api_account_id;
-  if (match) {
+  if (account) {
     if (accountId == null && match.strength >= 3) {
-      accountId = match.account.id;
+      accountId = account.id;
     }
-    if (typeof match.account.schedulable === 'boolean') {
-      schedulable = match.account.schedulable ? 1 : 0;
+    if (typeof account.schedulable === 'boolean') {
+      schedulable = account.schedulable ? 1 : 0;
     }
   }
+  const accountStatus = account && account.status ? account.status : 'unknown';
+  const accountErrorMessage = account && account.error_message ? account.error_message : '';
 
   db.prepare('UPDATE api_keys SET sub2api_groups = ?, sub2api_schedulable = ?, sub2api_account_id = ?, sub2api_status = ?, sub2api_error_message = ? WHERE id = ?')
     .run(groupStr || null, schedulable, accountId, accountStatus, accountErrorMessage, keyId);
