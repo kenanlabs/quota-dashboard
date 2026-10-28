@@ -1,12 +1,21 @@
-FROM node:24-bookworm-slim AS builder
+# 国内加速源，默认启用；官方源构建：
+#   --build-arg DEBIAN_MIRROR=deb.debian.org --build-arg NPM_REGISTRY=https://registry.npmjs.org
+ARG DEBIAN_MIRROR=mirrors.aliyun.com
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 
-RUN apt-get update -qq && \
+FROM node:24-bookworm-slim AS builder
+ARG DEBIAN_MIRROR
+ARG NPM_REGISTRY
+ENV npm_config_better_sqlite3_binary_host=https://registry.npmmirror.com/-/binary/better-sqlite3
+
+RUN sed -i "s@deb.debian.org@${DEBIAN_MIRROR}@g" /etc/apt/sources.list.d/debian.sources && \
+    apt-get update -qq && \
     apt-get install -y -qq python3 make g++ gcc > /dev/null && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --registry="$NPM_REGISTRY"
 COPY tailwind.config.js ./
 COPY src/ ./src/
 COPY public/ ./public/
@@ -15,14 +24,18 @@ RUN npm run build:css && \
     cp node_modules/alpinejs/dist/cdn.min.js public/vendor/alpine.min.js
 
 FROM node:24-bookworm-slim AS production-deps
+ARG DEBIAN_MIRROR
+ARG NPM_REGISTRY
+ENV npm_config_better_sqlite3_binary_host=https://registry.npmmirror.com/-/binary/better-sqlite3
 
-RUN apt-get update -qq && \
+RUN sed -i "s@deb.debian.org@${DEBIAN_MIRROR}@g" /etc/apt/sources.list.d/debian.sources && \
+    apt-get update -qq && \
     apt-get install -y -qq python3 make g++ gcc > /dev/null && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --registry="$NPM_REGISTRY"
 
 FROM node:24-bookworm-slim
 
