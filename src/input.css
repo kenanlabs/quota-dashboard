@@ -447,6 +447,70 @@
     input[type=number] {
       -moz-appearance: textfield;
     }
+    /* 全局统一复选框 (Checkbox System)：彻底弃用浏览器原生复选框 */
+    input[type="checkbox"],
+    .q-checkbox {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      border-radius: 5px;
+      border: 1.5px solid var(--q-line-strong);
+      background-color: var(--q-surface);
+      cursor: pointer;
+      display: inline-grid;
+      place-content: center;
+      position: relative;
+      flex-shrink: 0;
+      vertical-align: middle;
+      transition: background-color var(--q-dur) var(--q-ease),
+                  border-color var(--q-dur) var(--q-ease),
+                  box-shadow var(--q-dur) var(--q-ease),
+                  transform var(--q-dur-fast) var(--q-ease);
+    }
+    input[type="checkbox"]:hover,
+    .q-checkbox:hover {
+      border-color: var(--q-teal);
+      background-color: var(--q-surface-muted);
+    }
+    input[type="checkbox"]:active,
+    .q-checkbox:active {
+      transform: scale(0.92);
+    }
+    input[type="checkbox"]:focus-visible,
+    .q-checkbox:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-teal) 45%, transparent);
+    }
+    input[type="checkbox"]:checked,
+    .q-checkbox:checked {
+      background-color: var(--q-teal);
+      border-color: var(--q-teal);
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 11px 11px;
+    }
+    input[type="checkbox"].q-checkbox-rose:hover,
+    .q-checkbox-rose:hover {
+      border-color: var(--q-rose);
+    }
+    input[type="checkbox"].q-checkbox-rose:focus-visible,
+    .q-checkbox-rose:focus-visible {
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-rose) 45%, transparent);
+    }
+    input[type="checkbox"].q-checkbox-rose:checked,
+    .q-checkbox-rose:checked {
+      background-color: var(--q-rose);
+      border-color: var(--q-rose);
+    }
+    input[type="checkbox"]:disabled,
+    .q-checkbox:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
     /* 弹性微交互与平滑动画 */
     .ease-spring {
       transition-timing-function: var(--q-ease);

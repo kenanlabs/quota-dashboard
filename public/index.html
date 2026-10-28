@@ -763,20 +763,34 @@
             </button>
           </div>
 
-          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-            <div class="font-semibold text-slate-800 dark:text-slate-200">公开控制权限</div>
-            <label class="flex items-start space-x-2 cursor-pointer">
-              <input type="checkbox" x-model="keyForm.public_schedule_control" class="mt-0.5 rounded text-teal-600">
-              <span>允许访客启停调度<span class="block text-[10.5px] text-slate-400">关闭后卡片不再显示调度开关。</span></span>
-            </label>
-            <label class="flex items-start space-x-2 cursor-pointer">
-              <input type="checkbox" x-model="keyForm.public_recover_control" class="mt-0.5 rounded text-teal-600">
-              <span>允许访客恢复临时异常<span class="block text-[10.5px] text-slate-400">不会解除管理员手动停用或硬锁状态。</span></span>
-            </label>
-            <label class="flex items-start space-x-2 cursor-pointer">
-              <input type="checkbox" x-model="keyForm.admin_locked" class="mt-0.5 rounded text-rose-600">
-              <span>管理员硬锁<span class="block text-[10.5px] text-slate-400">启用后拒绝所有公开调度与恢复操作。</span></span>
-            </label>
+          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-slate-800 dark:text-slate-200">公开控制权限</span>
+              <span class="text-[10.5px] text-slate-400">默认安全关闭 · 仅授权项对访客生效</span>
+            </div>
+            <div class="space-y-2 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 p-2.5 border border-slate-200/80 dark:border-slate-700/60">
+              <label class="flex items-start space-x-2.5 cursor-pointer select-none" :class="keyForm.admin_locked ? 'opacity-50' : ''">
+                <input type="checkbox" x-model="keyForm.public_schedule_control" :disabled="!!keyForm.admin_locked" class="q-checkbox mt-0.5">
+                <span class="leading-tight">
+                  <span class="font-medium text-slate-800 dark:text-slate-200">允许访客启停调度</span>
+                  <span class="block text-[10.5px] text-slate-400 mt-0.5">勾选后在前台卡片展示调度开关，访客可点击启停；未勾选则前台隐藏开关</span>
+                </span>
+              </label>
+              <label class="flex items-start space-x-2.5 cursor-pointer select-none" :class="keyForm.admin_locked ? 'opacity-50' : ''">
+                <input type="checkbox" x-model="keyForm.public_recover_control" :disabled="!!keyForm.admin_locked" class="q-checkbox mt-0.5">
+                <span class="leading-tight">
+                  <span class="font-medium text-slate-800 dark:text-slate-200">允许访客恢复临时异常</span>
+                  <span class="block text-[10.5px] text-slate-400 mt-0.5">勾选后允许访客在接口限流时点击重试；不会解除管理员硬锁或手动停用</span>
+                </span>
+              </label>
+              <label class="flex items-start space-x-2.5 cursor-pointer select-none pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60">
+                <input type="checkbox" x-model="keyForm.admin_locked" class="q-checkbox q-checkbox-rose mt-0.5">
+                <span class="leading-tight">
+                  <span class="font-medium text-rose-700 dark:text-rose-400">管理员硬锁（最高安全级别）</span>
+                  <span class="block text-[10.5px] text-slate-400 mt-0.5">勾选后强行锁定该账号，全面拒绝前台一切公开调度与恢复操作</span>
+                </span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -909,51 +923,51 @@
             <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-2">普通访客可见信息项控制</label>
             <div class="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.display_name" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.display_name" class="q-checkbox">
                 <span>密钥展示名称</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.team" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.team" class="q-checkbox">
                 <span>所属团队</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.owner" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.owner" class="q-checkbox">
                 <span>负责人姓名</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.member_count" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.member_count" class="q-checkbox">
                 <span>团队使用人数</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.sub2api_groups" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.sub2api_groups" class="q-checkbox">
                 <span>Sub2API 关联分组</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.sub2api_schedulable" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.sub2api_schedulable" class="q-checkbox">
                 <span>Sub2API 调度开关</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.sub2api_status" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.sub2api_status" class="q-checkbox">
                 <span>Sub2API 账号健康状态</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.usage_5h" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.usage_5h" class="q-checkbox">
                 <span>5小时限额用量</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.usage_7d" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.usage_7d" class="q-checkbox">
                 <span>7天限额用量</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.usage_monthly" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.usage_monthly" class="q-checkbox">
                 <span>月度限额用量</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.reset_time" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.reset_time" class="q-checkbox">
                 <span>配额重置倒计时</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" x-model="settingsForm.visible_fields.last_updated" class="rounded text-teal-600">
+                <input type="checkbox" x-model="settingsForm.visible_fields.last_updated" class="q-checkbox">
                 <span>最后更新时间</span>
               </label>
             </div>
@@ -1018,7 +1032,7 @@
               当前未配置独立控制 Key，公开控制将复用管理员 Key。请确认只对需要公开控制的账号开启“允许公开调度/恢复”，并保留管理员硬锁。
             </p>
             <label x-show="settingsForm.sub2api_control_api_key_set" class="mt-2 inline-flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400">
-              <input type="checkbox" x-model="settingsForm.sub2api_control_api_key_clear" class="rounded text-rose-600">
+              <input type="checkbox" x-model="settingsForm.sub2api_control_api_key_clear" class="q-checkbox q-checkbox-rose">
               保存时清除已配置的公开控制 Key
             </label>
           </div>
@@ -1215,10 +1229,7 @@
               >
                 <div class="flex items-center space-x-3 min-w-0 flex-1">
                   <label class="cursor-pointer select-none flex items-center flex-shrink-0">
-                    <input type="checkbox" :checked="!!acc.enabled" @change="acc.enabled = $event.target.checked ? 1 : 0" class="sr-only">
-                    <span class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition" :class="acc.enabled ? 'bg-teal-600 border-teal-600' : 'border-slate-300 dark:border-slate-600'">
-                      <svg x-show="acc.enabled" class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                    </span>
+                    <input type="checkbox" :checked="!!acc.enabled" @change="acc.enabled = $event.target.checked ? 1 : 0" class="q-checkbox">
                   </label>
                   <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 flex-shrink-0">
                     <template x-if="getProviderLogo(acc.platform)"><img :src="getProviderLogo(acc.platform)" :alt="acc.platform" class="w-full h-full object-contain"></template>
