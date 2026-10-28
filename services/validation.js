@@ -46,6 +46,7 @@ const settingsSchema = z.object({
   site_title: z.string().trim().min(1).max(120).optional(),
   site_description: z.string().max(300).optional(),
   site_icon: z.string().trim().max(500).optional(),
+  announcement: z.string().max(5000).optional(),
   refresh_interval: z.coerce.number().int().min(60).max(86400).optional(),
   theme_mode: z.enum(['light', 'dark', 'auto']).optional(),
   visible_fields: z.record(z.string(), z.boolean()).optional(),

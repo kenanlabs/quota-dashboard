@@ -11,7 +11,8 @@ const PUBLIC_KEYS = new Set([
   'site_icon',
   'refresh_interval',
   'theme_mode',
-  'visible_fields'
+  'visible_fields',
+  'announcement'
 ]);
 
 const INTERNAL_KEYS = new Set([
@@ -115,6 +116,7 @@ function publicSettings(db) {
     site_title: String(getSetting(db, 'site_title') || '').slice(0, 120),
     site_description: String(getSetting(db, 'site_description') || '').slice(0, 300),
     site_icon: safeSiteIcon(getSetting(db, 'site_icon')),
+    announcement: String(getSetting(db, 'announcement') || '').slice(0, 5000),
     refresh_interval: Math.max(60, Number.parseInt(getSetting(db, 'refresh_interval'), 10) || 300),
     theme_mode: getSetting(db, 'theme_mode') || 'auto',
     visible_fields: visibleFields(db)

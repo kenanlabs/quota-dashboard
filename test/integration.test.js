@@ -90,6 +90,7 @@ test('security boundaries and public capability flow', async t => {
 
   const publicSettings = await jsonFetch(`${baseUrl}/api/settings`);
   assert.equal(publicSettings.body.success, true);
+  assert.equal(publicSettings.body.data.announcement, '');
   assert.equal(Object.prototype.hasOwnProperty.call(publicSettings.body.data, 'sub2api_url'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(publicSettings.body.data, 'sub2api_admin_api_key'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(publicSettings.body.data, 'sub2api_configured'), false);
@@ -170,6 +171,19 @@ test('security boundaries and public capability flow', async t => {
     body: JSON.stringify({ visible_fields: { owner: false } })
   });
   assert.equal(visibilityUpdate.response.status, 200);
+
+  const announcementUpdate = await jsonFetch(`${baseUrl}/api/admin/settings`, {
+    method: 'PUT',
+    headers: {
+      Cookie: cookieHeader(adminCookies),
+      'Content-Type': 'application/json',
+      'x-csrf-token': login.body.csrfToken
+    },
+    body: JSON.stringify({ announcement: '**重要通知**：集群将于凌晨维护，详情见 [维护指南](https://example.com)' })
+  });
+  assert.equal(announcementUpdate.response.status, 200);
+  const updatedSettings = await jsonFetch(`${baseUrl}/api/settings`);
+  assert.match(updatedSettings.body.data.announcement, /重要通知/);
 
   const syncIntervalUpdate = await jsonFetch(`${baseUrl}/api/admin/settings`, {
     method: 'PUT',

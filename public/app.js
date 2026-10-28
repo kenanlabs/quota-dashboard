@@ -64,6 +64,7 @@ function dashboardApp() {
           site_title: 'Quota Dashboard',
           site_description: 'AI 模型 API Key 用量与配额监控',
           site_icon: '/favicon.svg',
+          announcement: '',
           refresh_interval: 300,
           theme_mode: 'auto',
           visible_fields: {
@@ -83,10 +84,13 @@ function dashboardApp() {
         },
         showSettingsModal: false,
         settingsTab: 'basic',
+        announcementDismissed: false,
+        announcementCollapsed: true,
         settingsForm: {
           site_title: '',
           site_description: '',
           site_icon: '',
+          announcement: '',
           refresh_interval: 300,
           theme_mode: 'auto',
           sub2api_url: '',
@@ -914,6 +918,141 @@ function dashboardApp() {
 
           if (fields.length === 0) return '搜索密钥名称 / 分组...';
           return `搜索 ${fields.join(' / ')}...`;
+        },
+
+        // Markdown 安全渲染引擎 (严格防止 XSS，支持标题、列表、粗体、斜体、代码、链接等)
+        renderMarkdown(md) {
+          if (!md || !md.trim()) return '';
+          const escaped = String(md)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+          const lines = escaped.split(/\r?\n/);
+          const out = [];
+          let inList = false;
+          let inQuote = false;
+          let quoteBuffer = [];
+
+          const flushQuote = () => {
+            if (inQuote && quoteBuffer.length > 0) {
+              out.push(`<blockquote class="announcement-quote">${quoteBuffer.join('<br>')}</blockquote>`);
+              quoteBuffer = [];
+              inQuote = false;
+            }
+          };
+
+          const flushList = () => {
+            if (inList) {
+              out.push('</ul>');
+              inList = false;
+            }
+          };
+
+          for (const rawLine of lines) {
+            const line = rawLine.trimEnd();
+
+            // 引用块 (注意: > 已被转义为 &gt;，故匹配 (?:&gt;|>))
+            const quoteMatch = line.match(/^\s*(?:&gt;|>)\s?(.*)$/);
+            if (quoteMatch) {
+              flushList();
+              inQuote = true;
+              quoteBuffer.push(this.parseInlineMarkdown(quoteMatch[1]));
+              continue;
+            } else {
+              flushQuote();
+            }
+
+            // 无序列表
+            const listMatch = line.match(/^(\s*)[-*+]\s+(.*)$/);
+            if (listMatch) {
+              if (!inList) {
+                out.push('<ul class="list-disc list-inside space-y-1.5 my-2 text-xs">');
+                inList = true;
+              }
+              out.push(`<li>${this.parseInlineMarkdown(listMatch[2])}</li>`);
+              continue;
+            } else {
+              flushList();
+            }
+
+            // 标题
+            if (/^###\s+/.test(line)) {
+              out.push(`<h5 class="font-bold text-slate-900 dark:text-white text-xs mt-3.5 mb-1.5">${this.parseInlineMarkdown(line.replace(/^###\s+/, ''))}</h5>`);
+              continue;
+            }
+            if (/^##\s+/.test(line)) {
+              out.push(`<h4 class="font-bold text-slate-900 dark:text-white text-sm mt-4 mb-2">${this.parseInlineMarkdown(line.replace(/^##\s+/, ''))}</h4>`);
+              continue;
+            }
+            if (/^#\s+/.test(line)) {
+              out.push(`<h3 class="font-extrabold text-slate-900 dark:text-white text-base mt-4 mb-2">${this.parseInlineMarkdown(line.replace(/^#\s+/, ''))}</h3>`);
+              continue;
+            }
+
+            // 空行
+            if (!line.trim()) {
+              out.push('<div class="h-2"></div>');
+              continue;
+            }
+
+            // 普通段落
+            out.push(`<p class="leading-relaxed text-xs text-slate-700 dark:text-slate-200">${this.parseInlineMarkdown(line)}</p>`);
+          }
+
+          flushList();
+          flushQuote();
+          return out.join('');
+        },
+
+        parseInlineMarkdown(str) {
+          if (!str) return '';
+          return str
+            .replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-slate-900 dark:text-white">$1</strong>')
+            .replace(/__(.+?)__/g, '<strong class="font-bold text-slate-900 dark:text-white">$1</strong>')
+            .replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>')
+            .replace(/_([^_]+)_/g, '<em class="italic">$1</em>')
+            .replace(/~~(.+?)~~/g, '<del class="line-through opacity-70">$1</del>')
+            .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 text-[11px] rounded bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-mono border border-teal-200/50 dark:border-teal-800/50">$1</code>')
+            .replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-600 dark:text-teal-400 underline decoration-teal-400/60 hover:text-teal-700 dark:hover:text-teal-300 font-medium inline-flex items-center gap-0.5">$1<svg class="w-2.5 h-2.5 inline-block opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>');
+        },
+
+        getAnnouncementHash(str) {
+          if (!str) return '';
+          let hash = 0;
+          for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
+          }
+          return String(hash);
+        },
+
+        get shouldShowAnnouncement() {
+          const raw = this.settings.announcement;
+          if (!raw || !raw.trim()) return false;
+          if (this.announcementDismissed) {
+            const currentHash = this.getAnnouncementHash(raw.trim());
+            const dismissedHash = sessionStorage.getItem('qd_dismissed_announcement');
+            if (dismissedHash === currentHash) return false;
+          }
+          return true;
+        },
+
+        dismissAnnouncement() {
+          const raw = this.settings.announcement;
+          if (raw && raw.trim()) {
+            sessionStorage.setItem('qd_dismissed_announcement', this.getAnnouncementHash(raw.trim()));
+          }
+          this.announcementDismissed = true;
+        },
+
+        get isAnnouncementExpandable() {
+          const raw = this.settings.announcement;
+          if (!raw || !raw.trim()) return false;
+          const lines = raw.trim().split(/\r?\n/).filter(l => l.trim().length > 0);
+          return lines.length > 3 || raw.trim().length > 130;
         },
 
         get filteredKeys() {

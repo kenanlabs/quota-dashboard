@@ -547,6 +547,7 @@ router.put('/settings', async (req, res) => {
       if (input.site_title !== undefined) setSetting(db, 'site_title', input.site_title);
       if (input.site_description !== undefined) setSetting(db, 'site_description', input.site_description);
       if (input.site_icon !== undefined) setSetting(db, 'site_icon', input.site_icon);
+      if (input.announcement !== undefined) setSetting(db, 'announcement', input.announcement);
       if (input.refresh_interval !== undefined) setSetting(db, 'refresh_interval', input.refresh_interval);
       if (input.theme_mode !== undefined) setSetting(db, 'theme_mode', input.theme_mode);
       if (input.visible_fields !== undefined) setSetting(db, 'visible_fields', JSON.stringify(input.visible_fields));

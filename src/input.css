@@ -546,6 +546,27 @@
       }
       .q-enter { animation: none !important; }
     }
+    /* 公告 4 行折叠与底部渐隐遮罩 */
+    .announcement-mask-collapsed {
+      max-height: 5.25rem !important;
+      overflow: hidden !important;
+      position: relative;
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%);
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%);
+    }
+    /* 公告中的 Markdown 引用块规范：宽阔留白、醒目标识、自适应微晶底色 */
+    .announcement-quote {
+      border-left: 3.5px solid var(--q-teal) !important;
+      background-color: color-mix(in srgb, var(--q-teal) 6%, var(--q-surface-muted)) !important;
+      padding: 9px 16px 9px 16px !important;
+      margin: 12px 0 !important;
+      border-radius: 0 10px 10px 0 !important;
+      color: var(--q-body) !important;
+      line-height: 1.65 !important;
+      font-size: 12px !important;
+      display: block !important;
+    }
+
     /* 全局现代优雅滚动条 */
     ::-webkit-scrollbar {
       width: 6px;
