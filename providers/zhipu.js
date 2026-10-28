@@ -38,7 +38,9 @@ async function queryUsage(apiKey, baseUrl, extraConfig = {}) {
 
   const data = response.data || {};
   if (data.success === false) {
-    throw new Error(`Zhipu API Error: ${data.msg || 'Unknown error'}`);
+    const err = new Error(`Zhipu API Error: ${data.msg || 'Unknown error'}`);
+    err.statusCode = 400;
+    throw err;
   }
 
   const limits = data.data?.limits || data.limits || [];

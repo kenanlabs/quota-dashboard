@@ -31,7 +31,9 @@ async function fetchUsage(keyConfig) {
   const provider = providers[providerName];
 
   if (!provider) {
-    throw new Error(`Unsupported provider: ${keyConfig.provider}`);
+    const err = new Error(`不支持的用量供应商: ${keyConfig.provider}`);
+    err.statusCode = 400;
+    throw err;
   }
 
   return await provider.queryUsage(keyConfig.api_key, keyConfig.base_url, {

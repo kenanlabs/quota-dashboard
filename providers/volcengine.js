@@ -70,7 +70,9 @@ function signVolcengineV4({ method, host, pathName, queryParams, headers, payloa
 async function queryUsage(apiKey, baseUrl, extraConfig = {}) {
   const { accessKeyId, secretAccessKey } = extraConfig;
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error('Volcengine usage query requires AccessKey ID and Secret Access Key');
+    const err = new Error('未配置火山引擎 AccessKey ID 或 Secret Access Key，请在 Key 设置中补充');
+    err.statusCode = 400;
+    throw err;
   }
 
   const region = 'cn-beijing';

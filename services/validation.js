@@ -6,8 +6,10 @@ const booleanish = z.preprocess(value => {
   return value;
 }, z.boolean());
 
-const optionalText = (max = 500) => z.string().trim().max(max).optional();
-const secretText = (max = 4096) => z.string().trim().max(max).optional();
+// 前端编辑表单会把数据库中的 NULL 原样回传，这里视为“字段未填写/未修改”。
+const nullToUndefined = value => (value === null ? undefined : value);
+const optionalText = (max = 500) => z.preprocess(nullToUndefined, z.string().trim().max(max).optional());
+const secretText = (max = 4096) => z.preprocess(nullToUndefined, z.string().trim().max(max).optional());
 
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(120),

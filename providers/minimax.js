@@ -23,9 +23,13 @@ async function queryUsage(apiKey, baseUrl) {
   const data = response.data || {};
   if (data.base_resp && data.base_resp.status_code !== 0) {
     if (data.base_resp.status_code === 2062) {
-      throw new Error(`MiniMax 套餐已过期或未订阅 (${data.base_resp.status_msg})`);
+      const err = new Error(`MiniMax 套餐已过期或未订阅 (${data.base_resp.status_msg})`);
+      err.statusCode = 400;
+      throw err;
     }
-    throw new Error(`MiniMax API Error: ${data.base_resp.status_msg || 'Unknown error'}`);
+    const err = new Error(`MiniMax API Error: ${data.base_resp.status_msg || 'Unknown error'}`);
+    err.statusCode = 400;
+    throw err;
   }
 
   const modelRemains = data.model_remains || [];

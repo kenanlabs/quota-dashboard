@@ -4,6 +4,12 @@ const axios = require('axios');
 const ipaddr = require('ipaddr.js');
 const config = require('../config');
 
+function clientError(message) {
+  const err = new Error(message);
+  err.statusCode = 400;
+  return err;
+}
+
 function isPrivateAddress(address) {
   try {
     const parsed = ipaddr.parse(address);
@@ -15,7 +21,7 @@ function isPrivateAddress(address) {
 
 async function validateOutboundUrl(rawUrl) {
   let value = String(rawUrl || '').trim();
-  if (!value) throw new Error('目标 URL 不能为空');
+  if (!value) throw clientError('目标 URL 不能为空');
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
     value = `https://${value}`;
   }
@@ -24,29 +30,29 @@ async function validateOutboundUrl(rawUrl) {
   try {
     parsed = new URL(value);
   } catch (_) {
-    throw new Error('目标 URL 格式无效');
+    throw clientError('目标 URL 格式无效');
   }
 
   if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error('仅允许 HTTP/HTTPS 目标');
+    throw clientError('仅允许 HTTP/HTTPS 目标');
   }
   if (parsed.protocol === 'http:' && !config.outboundAllowHttp) {
-    throw new Error('仅允许 HTTPS 目标');
+    throw clientError('仅允许 HTTPS 目标');
   }
   if (parsed.username || parsed.password) {
-    throw new Error('目标 URL 不允许包含账号密码');
+    throw clientError('目标 URL 不允许包含账号密码');
   }
   if (
     parsed.port &&
     !['80', '443'].includes(parsed.port) &&
     !config.outboundAllowPrivate
   ) {
-    throw new Error('目标 URL 端口不受支持');
+    throw clientError('目标 URL 端口不受支持');
   }
 
   const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
   if (!hostname || hostname.length > 253) {
-    throw new Error('目标主机名无效');
+    throw clientError('目标主机名无效');
   }
   let records;
   if (net.isIP(hostname)) {
@@ -54,9 +60,9 @@ async function validateOutboundUrl(rawUrl) {
   } else {
     records = await dns.lookup(hostname, { all: true, verbatim: true });
   }
-  if (!records.length) throw new Error('目标域名无法解析');
+  if (!records.length) throw clientError('目标域名无法解析');
   if (!config.outboundAllowPrivate && records.some(record => isPrivateAddress(record.address))) {
-    throw new Error('目标地址不允许指向内网、回环或保留地址');
+    throw clientError('目标地址不允许指向内网、回环或保留地址');
   }
 
   parsed.hash = '';

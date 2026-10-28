@@ -25,6 +25,12 @@ function normalizeUrl(url) {
 /**
  * 构造请求头
  */
+function clientError(message, status = 400) {
+  const err = new Error(message);
+  err.statusCode = status;
+  return err;
+}
+
 function getAuthHeaders(apiKey) {
   const headers = {
     'Accept': 'application/json',
@@ -84,10 +90,10 @@ function getSub2apiControlCredentials(db) {
 async function testConnection(rawUrl, apiKey) {
   const baseUrl = normalizeUrl(rawUrl);
   if (!baseUrl) {
-    throw new Error('Sub2API Base URL 不能为空');
+    throw clientError('Sub2API Base URL 不能为空');
   }
   if (!apiKey) {
-    throw new Error('Sub2API 管理员 API Key 不能为空');
+    throw clientError('Sub2API 管理员 API Key 不能为空');
   }
 
   const headers = getAuthHeaders(apiKey);
@@ -130,7 +136,7 @@ async function testConnection(rawUrl, apiKey) {
     } else if (err.code === 'ETIMEDOUT' || err.message.includes('timeout')) {
       msg = `连接 ${baseUrl} 超时`;
     }
-    throw new Error(msg);
+    throw clientError(msg);
   }
 }
 
@@ -185,7 +191,7 @@ async function fetchSub2apiData(rawUrl, apiKey, options = {}) {
     }
   }
   if (!groupsLoaded) {
-    throw new Error('无法获取 Sub2API 分组列表');
+    throw clientError('无法获取 Sub2API 分组列表');
   }
 
   // 建立 Group ID -> Group Name 映射表
@@ -262,7 +268,7 @@ async function fetchSub2apiData(rawUrl, apiKey, options = {}) {
     });
   } catch (e) {
     console.warn('[Sub2API] 获取账号列表失败:', e.message);
-    throw new Error(`无法获取 Sub2API 账号列表: ${e.message}`);
+    throw clientError(`无法获取 Sub2API 账号列表: ${e.message}`);
   }
 
   // 4. 有限并发获取下游 API Keys，避免大量分组串行等待。
@@ -491,12 +497,12 @@ function findKeyAccount(keyRecord, sub2apiData) {
  */
 async function setAccountSchedulable(rawUrl, apiKey, accountId, schedulable) {
   const baseUrl = normalizeUrl(rawUrl);
-  if (!baseUrl) throw new Error('Sub2API Base URL 不能为空');
-  if (!apiKey) throw new Error('Sub2API 管理员 API Key 不能为空');
+  if (!baseUrl) throw clientError('Sub2API Base URL 不能为空');
+  if (!apiKey) throw clientError('Sub2API 管理员 API Key 不能为空');
 
   const id = Number(accountId);
   if (!Number.isFinite(id) || id <= 0) {
-    throw new Error('无效的 Sub2API 账号 ID');
+    throw clientError('无效的 Sub2API 账号 ID');
   }
 
   const headers = getAuthHeaders(apiKey);
@@ -525,10 +531,10 @@ async function setAccountSchedulable(rawUrl, apiKey, accountId, schedulable) {
         );
         return { schedulable: readSchedulable(res.data && res.data.data) };
       } catch (fallbackErr) {
-        throw new Error(formatSub2apiError(fallbackErr));
+        throw clientError(formatSub2apiError(fallbackErr));
       }
     }
-    throw new Error(formatSub2apiError(err));
+    throw clientError(formatSub2apiError(err));
   }
 }
 
@@ -645,11 +651,11 @@ function computeAccountHealth(acc) {
  */
 async function fetchAccountById(rawUrl, apiKey, accountId) {
   const baseUrl = normalizeUrl(rawUrl);
-  if (!baseUrl) throw new Error('Sub2API Base URL 不能为空');
-  if (!apiKey) throw new Error('Sub2API 管理员 API Key 不能为空');
+  if (!baseUrl) throw clientError('Sub2API Base URL 不能为空');
+  if (!apiKey) throw clientError('Sub2API 管理员 API Key 不能为空');
 
   const id = Number(accountId);
-  if (!Number.isFinite(id) || id <= 0) throw new Error('无效的 Sub2API 账号 ID');
+  if (!Number.isFinite(id) || id <= 0) throw clientError('无效的 Sub2API 账号 ID');
 
   const res = await safeGet(`${baseUrl}/api/v1/admin/accounts/${id}`, {
     headers: getAuthHeaders(apiKey),
@@ -668,12 +674,12 @@ async function fetchAccountById(rawUrl, apiKey, accountId) {
  */
 async function clearAccountError(rawUrl, apiKey, accountId, options = {}) {
   const baseUrl = normalizeUrl(rawUrl);
-  if (!baseUrl) throw new Error('Sub2API Base URL 不能为空');
-  if (!apiKey) throw new Error('Sub2API 管理员 API Key 不能为空');
+  if (!baseUrl) throw clientError('Sub2API Base URL 不能为空');
+  if (!apiKey) throw clientError('Sub2API 管理员 API Key 不能为空');
 
   const id = Number(accountId);
   if (!Number.isFinite(id) || id <= 0) {
-    throw new Error('无效的 Sub2API 账号 ID');
+    throw clientError('无效的 Sub2API 账号 ID');
   }
 
   const headers = getAuthHeaders(apiKey);
@@ -840,7 +846,7 @@ async function syncAllKeys(db) {
 
   const sub2apiData = await fetchSub2apiData(sub2apiUrl, sub2apiApiKey, { includeCredentials: false });
   if (!sub2apiData) {
-    throw new Error('无法获取 Sub2API 数据');
+    throw clientError('无法获取 Sub2API 数据');
   }
 
   const keys = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable, sub2api_status, sub2api_error_message FROM api_keys WHERE enabled = 1')
@@ -904,18 +910,18 @@ async function syncSingleKey(keyId, db) {
   const { url: sub2apiUrl, key: sub2apiApiKey } = getSub2apiAdminCredentials(db);
 
   if (!sub2apiUrl || !sub2apiApiKey) {
-    throw new Error('未配置 Sub2API 服务地址或管理员 API Key');
+    throw clientError('未配置 Sub2API 服务地址或管理员 API Key');
   }
 
   const keyRecord = db.prepare('SELECT id, provider, display_name, api_key, sub2api_account_id, sub2api_groups, sub2api_schedulable FROM api_keys WHERE id = ?').get(keyId);
   if (!keyRecord) {
-    throw new Error('未找到指定的 API Key');
+    throw clientError('未找到指定的 API Key', 404);
   }
   keyRecord.api_key = decryptSecret(keyRecord.api_key);
 
   const sub2apiData = await fetchSub2apiData(sub2apiUrl, sub2apiApiKey, { includeCredentials: false });
   if (!sub2apiData) {
-    throw new Error('获取 Sub2API 数据失败');
+    throw clientError('获取 Sub2API 数据失败');
   }
 
   const groups = matchKeyGroups(keyRecord, sub2apiData);
@@ -960,7 +966,7 @@ async function syncSingleKey(keyId, db) {
 async function fetchSub2apiAccounts(rawUrl, apiKey, db) {
   const sub2apiData = await fetchSub2apiData(rawUrl, apiKey, { includeCredentials: false });
   if (!sub2apiData) {
-    throw new Error('无法连接 Sub2API 或获取账号数据');
+    throw clientError('无法连接 Sub2API 或获取账号数据');
   }
 
   const { groupMap, accounts: sub2Accounts, groups } = sub2apiData;
@@ -1059,7 +1065,7 @@ async function importSub2apiAccountsByIds(rawUrl, apiKey, selections, db) {
 
   const sub2apiData = await fetchSub2apiData(rawUrl, apiKey, { includeCredentials: true });
   if (!sub2apiData) {
-    throw new Error('无法连接 Sub2API 或获取账号数据');
+    throw clientError('无法连接 Sub2API 或获取账号数据');
   }
 
   const { groupMap, accounts } = sub2apiData;

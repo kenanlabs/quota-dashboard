@@ -7,7 +7,9 @@ const { safeGet } = require('../services/safeHttp');
  */
 async function queryUsage(apiKey, baseUrl) {
   if (!baseUrl) {
-    throw new Error('ZenMux requires a base_url');
+    const err = new Error('未配置 ZenMux Base URL，请在 Key 设置中补充');
+    err.statusCode = 400;
+    throw err;
   }
 
   const url = baseUrl.replace(/\/$/, '');
@@ -25,12 +27,16 @@ async function queryUsage(apiKey, baseUrl) {
 
   if (data.success !== true) {
     const msg = data.message || 'Unknown error';
-    throw new Error(`ZenMux API Error: ${msg}`);
+    const err = new Error(`ZenMux API Error: ${msg}`);
+    err.statusCode = 400;
+    throw err;
   }
 
   const body = data.data;
   if (!body) {
-    throw new Error('Missing data field in ZenMux response');
+    const err = new Error('ZenMux 返回数据格式异常');
+    err.statusCode = 400;
+    throw err;
   }
 
   let usage5h = null, reset5h = null;
