@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quota Dashboard - API Key 用量监控平台</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/tailwind.css?v=20261028f">
+  <link rel="stylesheet" href="/tailwind.css?v=20261028l">
   <script defer src="/vendor/alpine.min.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen antialiased" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance">
+<body class="bg-slate-50 text-slate-800 min-h-screen antialiased" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance" :data-theme-palette="themePalette">
   <div id="app-tooltip" role="tooltip" aria-hidden="true"></div>
 
   <!-- Toast 通知 -->
@@ -20,8 +20,8 @@
     style="display: none;"
   >
     <div
-      class="pointer-events-auto rounded-xl shadow-lg border px-4 py-3 flex items-center space-x-3 text-sm"
-      :class="toast.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'"
+      class="pointer-events-auto rounded-xl shadow-lg border px-4 py-3 flex items-center space-x-3 text-sm backdrop-blur-md transition-all"
+      :class="toast.type === 'error' ? 'bg-rose-50 dark:bg-rose-950/80 border-rose-200 dark:border-rose-900/80 text-rose-800 dark:text-rose-200' : 'q-toast-success'"
     >
       <template x-if="toast.type === 'error'">
         <svg class="w-5 h-5 flex-shrink-0 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -29,7 +29,7 @@
         </svg>
       </template>
       <template x-if="toast.type === 'success'">
-        <svg class="w-5 h-5 flex-shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-5 h-5 flex-shrink-0 q-toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
       </template>
@@ -152,7 +152,7 @@
             x-transition:leave="transition ease-spring duration-120"
             x-transition:leave-start="opacity-100 scale-100 translate-y-0"
             x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-            class="absolute right-0 mt-1.5 w-36 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-xs overflow-hidden"
+            class="absolute right-0 mt-1.5 w-44 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-xs overflow-hidden"
             x-cloak
           >
             <button type="button" @click="setThemeMode('auto'); themeOpen = false" class="w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/60 transition" :class="themeMode === 'auto' ? 'text-teal-700 dark:text-teal-400 font-bold bg-teal-50/60 dark:bg-teal-950/40' : 'text-slate-600 dark:text-slate-300'">
@@ -176,6 +176,27 @@
               </span>
               <span x-show="themeMode === 'dark'" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400"></span>
             </button>
+
+            <!-- 配色风格选择 (不改 UI，仅切换色彩风格) -->
+            <div class="my-1 border-t border-slate-100 dark:border-slate-700"></div>
+            <div class="px-3 py-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">配色风格</div>
+            <template x-for="p in themePaletteList" :key="p.id">
+              <button
+                type="button"
+                @click="setThemePalette(p.id); themeOpen = false"
+                class="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+                :class="themePalette === p.id ? 'text-teal-700 dark:text-teal-400 font-bold bg-teal-50/60 dark:bg-teal-950/40' : 'text-slate-600 dark:text-slate-300'"
+              >
+                <span class="flex items-center gap-2">
+                  <span
+                    class="w-2.5 h-2.5 rounded-full border border-slate-300 dark:border-slate-600 flex-shrink-0"
+                    :style="`background-color: ${resolvedAppearance === 'dark' ? p.darkColor : p.color}`"
+                  ></span>
+                  <span x-text="p.name"></span>
+                </span>
+                <span x-show="themePalette === p.id" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400"></span>
+              </button>
+            </template>
           </div>
         </div>
 
@@ -855,7 +876,7 @@
               <!-- 权限项 1: 公开调度 -->
               <label
                 class="flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none"
-                :class="keyForm.admin_locked ? 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20' : (keyForm.public_schedule_control ? 'border-teal-500/50 bg-teal-50/30 dark:bg-teal-950/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-700')"
+                :class="keyForm.admin_locked ? 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20' : (keyForm.public_schedule_control ? 'border-teal-500 bg-teal-50/40 dark:bg-teal-950/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-700')"
               >
                 <div class="min-w-0 pr-3">
                   <div class="font-medium text-slate-800 dark:text-slate-100 text-xs">允许访客启停调度</div>
@@ -872,7 +893,7 @@
               <!-- 权限项 2: 公开恢复 -->
               <label
                 class="flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none"
-                :class="keyForm.admin_locked ? 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20' : (keyForm.public_recover_control ? 'border-teal-500/50 bg-teal-50/30 dark:bg-teal-950/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-700')"
+                :class="keyForm.admin_locked ? 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20' : (keyForm.public_recover_control ? 'border-teal-500 bg-teal-50/40 dark:bg-teal-950/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-700')"
               >
                 <div class="min-w-0 pr-3">
                   <div class="font-medium text-slate-800 dark:text-slate-100 text-xs">允许访客恢复临时异常</div>
@@ -1006,15 +1027,40 @@
           <div>
             <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-2">默认外观模式</label>
             <div class="grid grid-cols-3 gap-2">
-              <button type="button" @click="settingsForm.theme_mode = 'auto'" class="px-3 py-2 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5" :class="settingsForm.theme_mode === 'auto' ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 ring-1 ring-teal-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'">
+              <button type="button" @click="settingsForm.theme_mode = 'auto'" class="px-3 py-2 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5" :class="settingsForm.theme_mode === 'auto' ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'">
                 自适应
               </button>
-              <button type="button" @click="settingsForm.theme_mode = 'light'" class="px-3 py-2 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5" :class="settingsForm.theme_mode === 'light' ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 ring-1 ring-teal-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'">
+              <button type="button" @click="settingsForm.theme_mode = 'light'" class="px-3 py-2 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5" :class="settingsForm.theme_mode === 'light' ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'">
                 浅色模式
               </button>
-              <button type="button" @click="settingsForm.theme_mode = 'dark'" class="px-3 py-2 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5" :class="settingsForm.theme_mode === 'dark' ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 ring-1 ring-teal-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'">
+              <button type="button" @click="settingsForm.theme_mode = 'dark'" class="px-3 py-2 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5" :class="settingsForm.theme_mode === 'dark' ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'">
                 深色模式
               </button>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-2">默认配色风格 (仅改配色 · 不动 UI)</label>
+            <div class="grid grid-cols-3 gap-2">
+              <template x-for="p in themePaletteList" :key="p.id">
+                <button
+                  type="button"
+                  @click="settingsForm.theme_palette = p.id; themePalette = p.id"
+                  class="p-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-between"
+                  :class="(settingsForm.theme_palette || 'teal') === p.id ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span
+                      class="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-600 flex-shrink-0"
+                      :style="`background-color: ${resolvedAppearance === 'dark' ? p.darkColor : p.color}`"
+                    ></span>
+                    <div class="text-left leading-tight">
+                      <div class="truncate font-bold" x-text="p.name"></div>
+                      <div class="text-[10px] text-slate-400 font-normal truncate" x-text="p.desc"></div>
+                    </div>
+                  </div>
+                  <span x-show="(settingsForm.theme_palette || 'teal') === p.id" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400 flex-shrink-0"></span>
+                </button>
+              </template>
             </div>
           </div>
           <div>
@@ -1035,7 +1081,7 @@
                     type="button"
                     @click="settingsForm.site_icon = icon.path"
                     class="p-1.5 rounded-lg border transition"
-                    :class="settingsForm.site_icon === icon.path ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 ring-1 ring-teal-300' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'"
+                    :class="settingsForm.site_icon === icon.path ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'"
                   >
                     <img :src="icon.path" :alt="icon.name" class="w-6 h-6 object-contain mx-auto">
                   </button>

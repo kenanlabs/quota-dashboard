@@ -211,6 +211,7 @@ function initDb() {
     site_icon: '/favicon.svg',
     refresh_interval: '300',
     theme_mode: 'auto',
+    theme_palette: 'teal',
     announcement: '',
     sub2api_url: '',
     visible_fields: JSON.stringify({

@@ -49,6 +49,7 @@ const settingsSchema = z.object({
   announcement: z.string().max(5000).optional(),
   refresh_interval: z.coerce.number().int().min(60).max(86400).optional(),
   theme_mode: z.enum(['light', 'dark', 'auto']).optional(),
+  theme_palette: z.enum(['teal', 'zinc', 'slate']).optional(),
   visible_fields: z.record(z.string(), z.boolean()).optional(),
   sub2api_url: z.string().trim().max(500).optional(),
   sub2api_sync_interval: z.coerce.number().int().min(60).max(86400).optional(),

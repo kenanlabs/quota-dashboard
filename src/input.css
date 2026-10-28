@@ -42,6 +42,239 @@
       --q-rose: #f07b90;
       --q-shadow: 0 20px 54px rgba(0, 0, 0, .28);
     }
+
+    /* --- 多主题配色方案 (Theme Palettes) --- */
+
+    /* 1. 极简黑白 (Zinc / 中性极简美学) */
+    body[data-theme-palette="zinc"] {
+      --q-canvas: #ffffff;
+      --q-surface: #ffffff;
+      --q-surface-muted: #f4f4f5;
+      --q-line: #e4e4e7;
+      --q-line-strong: #d4d4d8;
+      --q-ink: #09090b;
+      --q-body: #27272a;
+      --q-muted: #71717a;
+      --q-faint: #a1a1aa;
+      --q-teal: #18181b;
+      --q-teal-contrast: #ffffff;
+      --q-teal-soft: #f4f4f5;
+      --q-teal-border: #18181b;
+      --q-green: #18181b;
+      --q-shadow: 0 16px 40px rgba(0, 0, 0, .05);
+    }
+    body[data-theme-palette="zinc"][data-appearance="dark"] {
+      --q-canvas: #09090b;
+      --q-surface: #121215;
+      --q-surface-muted: #18181b;
+      --q-line: #27272a;
+      --q-line-strong: #3f3f46;
+      --q-ink: #fafafa;
+      --q-body: #e4e4e7;
+      --q-muted: #a1a1aa;
+      --q-faint: #71717a;
+      --q-teal: #fafafa;
+      --q-teal-contrast: #09090b;
+      --q-teal-soft: rgba(255, 255, 255, 0.08);
+      --q-teal-border: #fafafa;
+      --q-green: #fafafa;
+      --q-shadow: 0 18px 48px rgba(0, 0, 0, .45);
+    }
+
+    /* 2. 极客深蓝 (Slate / Blue 风格) */
+    body[data-theme-palette="slate"] {
+      --q-canvas: #f8fafc;
+      --q-surface: #ffffff;
+      --q-surface-muted: #f1f5f9;
+      --q-line: #e2e8f0;
+      --q-line-strong: #cbd5e1;
+      --q-ink: #0f172a;
+      --q-body: #334155;
+      --q-muted: #64748b;
+      --q-faint: #94a3b8;
+      --q-teal: #2563eb;
+      --q-teal-contrast: #ffffff;
+      --q-teal-soft: #eff6ff;
+      --q-teal-border: #bfdbfe;
+      --q-shadow: 0 16px 40px rgba(15, 23, 42, .06);
+    }
+    body[data-theme-palette="slate"][data-appearance="dark"] {
+      --q-canvas: #0b1329;
+      --q-surface: #111c3a;
+      --q-surface-muted: #17254b;
+      --q-line: #1e3160;
+      --q-line-strong: #2a4484;
+      --q-ink: #f0f6fc;
+      --q-body: #c9d7ec;
+      --q-muted: #8ea5c8;
+      --q-faint: #657eab;
+      --q-teal: #38bdf8;
+      --q-teal-contrast: #0b1329;
+      --q-teal-soft: rgba(56, 189, 248, .14);
+      --q-teal-border: #2a4484;
+      --q-shadow: 0 18px 48px rgba(0, 0, 0, .36);
+    }
+
+    /* --- 全局调色板颜色桥接映射 (免改 UI 结构，自动应用配色) --- */
+    body:not([data-theme-palette="teal"]) .text-teal-600,
+    body:not([data-theme-palette="teal"]) .text-teal-700,
+    body:not([data-theme-palette="teal"]) .text-teal-400,
+    body:not([data-theme-palette="teal"]) .text-teal-800,
+    body:not([data-theme-palette="teal"]) [class*="text-teal-"] {
+      color: var(--q-teal) !important;
+    }
+    body:not([data-theme-palette="teal"]) .bg-teal-600 {
+      background-color: var(--q-teal) !important;
+      color: var(--q-teal-contrast, #ffffff) !important;
+    }
+    body:not([data-theme-palette="teal"]) .hover\:bg-teal-700:hover {
+      filter: brightness(0.92);
+    }
+    body:not([data-theme-palette="teal"]) .bg-teal-50,
+    body:not([data-theme-palette="teal"]) .bg-teal-100,
+    body:not([data-theme-palette="teal"]) .bg-teal-50\/20,
+    body:not([data-theme-palette="teal"]) .bg-teal-50\/30,
+    body:not([data-theme-palette="teal"]) .bg-teal-50\/60,
+    body:not([data-theme-palette="teal"]) .bg-teal-50\/70,
+    body:not([data-theme-palette="teal"]) .bg-teal-950\/20,
+    body:not([data-theme-palette="teal"]) .bg-teal-950\/40,
+    body:not([data-theme-palette="teal"]) .bg-teal-950\/50,
+    body:not([data-theme-palette="teal"]) .bg-teal-950\/60,
+    body:not([data-theme-palette="teal"]) [class*="bg-teal-50"],
+    body:not([data-theme-palette="teal"]) [class*="bg-teal-100"],
+    body:not([data-theme-palette="teal"]) [class*="bg-teal-950"] {
+      background-color: var(--q-teal-soft) !important;
+    }
+    body:not([data-theme-palette="teal"]) .border-teal-500,
+    body:not([data-theme-palette="teal"]) .border-teal-600,
+    body:not([data-theme-palette="teal"]) .border-teal-200,
+    body:not([data-theme-palette="teal"]) .border-teal-500\/50,
+    body:not([data-theme-palette="teal"]) .border-teal-200\/80,
+    body:not([data-theme-palette="teal"]) .border-teal-200\/60,
+    body:not([data-theme-palette="teal"]) .border-teal-200\/50,
+    body:not([data-theme-palette="teal"]) .border-teal-800,
+    body:not([data-theme-palette="teal"]) .border-teal-800\/80,
+    body:not([data-theme-palette="teal"]) .border-teal-800\/60,
+    body:not([data-theme-palette="teal"]) .border-teal-800\/50,
+    body:not([data-theme-palette="teal"]) [class*="border-teal-"] {
+      border-color: var(--q-teal-border, var(--q-line-strong)) !important;
+    }
+    body:not([data-theme-palette="teal"]) .ring-teal-300,
+    body:not([data-theme-palette="teal"]) .ring-teal-500,
+    body:not([data-theme-palette="teal"]) [class*="ring-teal-"],
+    body:not([data-theme-palette="teal"]) input:focus,
+    body:not([data-theme-palette="teal"]) select:focus,
+    body:not([data-theme-palette="teal"]) textarea:focus,
+    body:not([data-theme-palette="teal"]) :focus-visible {
+      --tw-ring-color: color-mix(in srgb, var(--q-teal) 45%, transparent) !important;
+      outline-color: color-mix(in srgb, var(--q-teal) 50%, transparent) !important;
+    }
+
+    /* --- 极简黑白 (Zinc / 中性极简美学) 深度全量覆盖 --- */
+    /* 1. 调度开关与状态胶囊 */
+    body[data-theme-palette="zinc"] .bg-emerald-600 {
+      background-color: var(--q-teal) !important;
+    }
+    body[data-theme-palette="zinc"][data-appearance="dark"] .bg-emerald-600 span.block {
+      background-color: #09090b !important;
+    }
+    body[data-theme-palette="zinc"] .bg-emerald-50,
+    body[data-theme-palette="zinc"][data-appearance="dark"] .dark\:bg-emerald-950\/40 {
+      background-color: var(--q-teal-soft) !important;
+      border-color: var(--q-line-strong) !important;
+      color: var(--q-ink) !important;
+    }
+    body[data-theme-palette="zinc"] .text-emerald-700,
+    body[data-theme-palette="zinc"] .text-emerald-600,
+    body[data-theme-palette="zinc"] .dark\:text-emerald-400,
+    body[data-theme-palette="zinc"] .dark\:text-emerald-300 {
+      color: var(--q-ink) !important;
+    }
+    /* 黑白模式下选中卡片与按钮边框强制反色，杜绝青绿 */
+    body[data-theme-palette="zinc"] .border-teal-500,
+    body[data-theme-palette="zinc"] .border-teal-600,
+    body[data-theme-palette="zinc"] .border-teal-500\/50,
+    body[data-theme-palette="zinc"] [class*="border-teal-"] {
+      border-color: #18181b !important;
+    }
+    body[data-theme-palette="zinc"][data-appearance="dark"] .border-teal-500,
+    body[data-theme-palette="zinc"][data-appearance="dark"] .border-teal-600,
+    body[data-theme-palette="zinc"][data-appearance="dark"] .border-teal-500\/50,
+    body[data-theme-palette="zinc"][data-appearance="dark"] [class*="border-teal-"] {
+      border-color: #fafafa !important;
+    }
+
+    /* 2. 自动刷新绿点脉冲 */
+    body[data-theme-palette="zinc"] .bg-emerald-500 {
+      background-color: var(--q-teal) !important;
+    }
+    /* 3. 复选框暗色模式白底黑钩 */
+    body[data-theme-palette="zinc"][data-appearance="dark"] input[type="checkbox"]:checked:not(.q-checkbox-rose),
+    body[data-theme-palette="zinc"][data-appearance="dark"] .q-checkbox:checked:not(.q-checkbox-rose) {
+      background-color: #fafafa !important;
+      border-color: #fafafa !important;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' stroke='%2309090b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E") !important;
+    }
+    /* 4. 聚焦环完全呈现为中性极简 ring-zinc-950 / ring-zinc-50 */
+    body[data-theme-palette="zinc"] input:focus,
+    body[data-theme-palette="zinc"] select:focus,
+    body[data-theme-palette="zinc"] textarea:focus,
+    body[data-theme-palette="zinc"] .focus\:ring-teal-500:focus {
+      box-shadow: 0 0 0 2px var(--q-teal) !important;
+      border-color: var(--q-teal) !important;
+    }
+    /* 5. 状态标签在黑白模式下内敛 */
+    body[data-theme-palette="zinc"] .q-tag.green {
+      background: var(--q-surface-muted) !important;
+      border-color: var(--q-line-strong) !important;
+      color: var(--q-ink) !important;
+    }
+    /* 6. 公告小铃铛图标在黑白模式下使用中性色 */
+    body[data-theme-palette="zinc"] .bg-amber-50 {
+      background-color: var(--q-surface-muted) !important;
+      border-color: var(--q-line-strong) !important;
+      color: var(--q-ink) !important;
+    }
+    body[data-theme-palette="zinc"][data-appearance="dark"] .dark\:bg-amber-950\/40 {
+      background-color: var(--q-surface-muted) !important;
+      border-color: var(--q-line-strong) !important;
+      color: var(--q-ink) !important;
+    }
+    /* 7. 轨道 hover 微光 */
+    body[data-theme-palette="zinc"] .q-rail:hover {
+      background-color: color-mix(in srgb, var(--q-ink) 3%, var(--q-surface)) !important;
+    }
+    body[data-theme-palette="zinc"] .q-card.drag-over {
+      border-color: var(--q-ink) !important;
+      box-shadow: inset 0 0 0 2px var(--q-ink) !important;
+    }
+    /* 8. 选中的 Primary 胶囊按钮 */
+    body[data-theme-palette="zinc"] .nav-pill-primary {
+      background-color: var(--q-teal) !important;
+      color: var(--q-teal-contrast) !important;
+      border-color: var(--q-teal) !important;
+    }
+    body[data-theme-palette="zinc"] .nav-pill-primary:hover {
+      filter: brightness(0.92);
+    }
+
+    /* --- 极客深蓝与紫罗兰模式的状态色调适配 --- */
+    body[data-theme-palette="slate"] .bg-emerald-600 {
+      background-color: var(--q-teal) !important;
+    }
+    body[data-theme-palette="slate"] .text-emerald-700,
+    body[data-theme-palette="slate"] .dark\:text-emerald-400 {
+      color: var(--q-teal) !important;
+    }
+    body[data-theme-palette="slate"] .bg-emerald-500 {
+      background-color: var(--q-teal) !important;
+    }
+    body[data-theme-palette="slate"] .nav-pill-primary {
+      background-color: var(--q-teal-soft) !important;
+      color: var(--q-teal) !important;
+      border-color: var(--q-teal-border) !important;
+    }
+
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
       font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -439,6 +672,35 @@
     }
     .toast-enter { animation: toast-in var(--q-dur-slow) var(--q-ease); }
     .toast-leave { animation: toast-out var(--q-dur) var(--q-ease) forwards; }
+
+    /* Toast 统一主题自适应规范 */
+    .q-toast-success {
+      background-color: var(--q-surface) !important;
+      border-color: color-mix(in srgb, var(--q-teal) 28%, var(--q-line)) !important;
+      color: var(--q-ink) !important;
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
+    }
+    .q-toast-icon {
+      color: var(--q-teal) !important;
+    }
+    body[data-theme-palette="zinc"] .q-toast-success {
+      background-color: var(--q-surface) !important;
+      border-color: var(--q-line-strong) !important;
+      color: var(--q-ink) !important;
+      box-shadow: 0 14px 36px -4px rgba(0, 0, 0, 0.18) !important;
+    }
+    body[data-theme-palette="zinc"] .q-toast-icon {
+      color: var(--q-teal) !important;
+    }
+    body[data-theme-palette="slate"] .q-toast-success {
+      background-color: var(--q-surface) !important;
+      border-color: var(--q-teal-border) !important;
+      color: var(--q-ink) !important;
+    }
+    body[data-theme-palette="slate"] .q-toast-icon {
+      color: var(--q-teal) !important;
+    }
+
     input[type=number]::-webkit-inner-spin-button,
     input[type=number]::-webkit-outer-spin-button {
       -webkit-appearance: none;

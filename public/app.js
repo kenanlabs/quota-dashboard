@@ -67,6 +67,7 @@ function dashboardApp() {
           announcement: '',
           refresh_interval: 300,
           theme_mode: 'auto',
+          theme_palette: 'teal',
           visible_fields: {
             display_name: true,
             team: true,
@@ -93,6 +94,7 @@ function dashboardApp() {
           announcement: '',
           refresh_interval: 300,
           theme_mode: 'auto',
+          theme_palette: 'teal',
           sub2api_url: '',
           sub2api_sync_interval: 900,
           sub2api_admin_api_key: '',
@@ -115,6 +117,12 @@ function dashboardApp() {
         sub2apiAccountsError: '',
         importingSub2apiAccounts: false,
         themeMode: 'auto',
+        themePalette: 'teal',
+        themePaletteList: [
+          { id: 'teal', name: '经典青碧', desc: '默认理智科技', color: '#0f766e', darkColor: '#5fd4c3' },
+          { id: 'zinc', name: '极简黑白', desc: '中性极简美学', color: '#18181b', darkColor: '#fafafa' },
+          { id: 'slate', name: '极客深蓝', desc: '沉浸科技深蓝', color: '#2563eb', darkColor: '#38bdf8' }
+        ],
         resolvedAppearance: 'light',
         themeMedia: null,
         tooltipElement: null,
@@ -327,6 +335,9 @@ function dashboardApp() {
                 this.themeMode = ['light', 'dark', 'auto'].includes(json.data.theme_mode) ? json.data.theme_mode : 'auto';
                 this.applyThemeMode();
               }
+              if (!localStorage.getItem('quotaThemePalette') && json.data.theme_palette) {
+                this.themePalette = ['teal', 'zinc', 'slate'].includes(json.data.theme_palette) ? json.data.theme_palette : 'teal';
+              }
             }
           } catch (err) {
             console.error('Fetch settings error:', err);
@@ -346,8 +357,10 @@ function dashboardApp() {
         },
 
         initializeTheme() {
-          const saved = localStorage.getItem('quotaThemeMode');
-          this.themeMode = ['light', 'dark', 'auto'].includes(saved) ? saved : this.settings.theme_mode;
+          const savedMode = localStorage.getItem('quotaThemeMode');
+          this.themeMode = ['light', 'dark', 'auto'].includes(savedMode) ? savedMode : (this.settings.theme_mode || 'auto');
+          const savedPalette = localStorage.getItem('quotaThemePalette');
+          this.themePalette = ['teal', 'zinc', 'slate'].includes(savedPalette) ? savedPalette : (this.settings.theme_palette || 'teal');
           this.themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
           this.themeMedia.addEventListener('change', () => {
             if (this.themeMode === 'auto') this.applyThemeMode();
@@ -361,6 +374,14 @@ function dashboardApp() {
           localStorage.setItem('quotaThemeMode', mode);
           this.applyThemeMode();
           this.showToast(mode === 'auto' ? '已跟随系统主题' : `已切换到${mode === 'dark' ? '深色' : '浅色'}主题`);
+        },
+
+        setThemePalette(palette) {
+          if (!['teal', 'zinc', 'slate'].includes(palette)) return;
+          this.themePalette = palette;
+          localStorage.setItem('quotaThemePalette', palette);
+          const found = this.themePaletteList.find(p => p.id === palette);
+          this.showToast(`已切换至「${found?.name || palette}」配色`);
         },
 
         applyThemeMode() {
@@ -669,6 +690,7 @@ function dashboardApp() {
                 this.settingsForm.visible_fields.sub2api_status = true;
               }
               if (this.settingsForm.theme_mode === undefined) this.settingsForm.theme_mode = 'auto';
+              if (this.settingsForm.theme_palette === undefined) this.settingsForm.theme_palette = 'teal';
               this.settingsForm.sub2api_admin_api_key ||= '';
               this.settingsForm.sub2api_control_api_key ||= '';
               this.settingsForm.sub2api_admin_api_key_clear = false;

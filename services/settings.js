@@ -11,6 +11,7 @@ const PUBLIC_KEYS = new Set([
   'site_icon',
   'refresh_interval',
   'theme_mode',
+  'theme_palette',
   'visible_fields',
   'announcement'
 ]);
@@ -119,6 +120,7 @@ function publicSettings(db) {
     announcement: String(getSetting(db, 'announcement') || '').slice(0, 5000),
     refresh_interval: Math.max(60, Number.parseInt(getSetting(db, 'refresh_interval'), 10) || 300),
     theme_mode: getSetting(db, 'theme_mode') || 'auto',
+    theme_palette: getSetting(db, 'theme_palette') || 'teal',
     visible_fields: visibleFields(db)
   };
 }
