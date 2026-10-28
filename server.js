@@ -35,12 +35,12 @@ app.use(helmet({
       workerSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
-      frameAncestors: ["'none'"],
+      frameAncestors: config.allowedFrameAncestors,
       upgradeInsecureRequests: config.isProduction ? [] : null
     }
   },
-  crossOriginResourcePolicy: { policy: 'same-origin' },
-  xFrameOptions: { action: 'deny' },
+  crossOriginResourcePolicy: config.allowEmbedding ? { policy: 'cross-origin' } : { policy: 'same-origin' },
+  xFrameOptions: config.allowEmbedding ? false : { action: 'deny' },
   referrerPolicy: { policy: 'no-referrer' },
   strictTransportSecurity: config.isProduction
     ? { maxAge: 31536000, includeSubDomains: true, preload: false }

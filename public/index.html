@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quota Dashboard - API Key 用量监控平台</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/tailwind.css">
+  <link rel="stylesheet" href="/tailwind.css?v=20261028c">
   <script defer src="/vendor/alpine.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen antialiased" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance">
@@ -763,32 +763,63 @@
             </button>
           </div>
 
-          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
             <div class="flex items-center justify-between">
-              <span class="font-semibold text-slate-800 dark:text-slate-200">公开控制权限</span>
-              <span class="text-[10.5px] text-slate-400">默认安全关闭 · 仅授权项对访客生效</span>
+              <span class="font-semibold text-slate-800 dark:text-slate-200 text-xs">公开控制权限</span>
+              <span class="text-[11px] text-slate-400">默认安全关闭 · 仅授权项对访客生效</span>
             </div>
-            <div class="space-y-2 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 p-2.5 border border-slate-200/80 dark:border-slate-700/60">
-              <label class="flex items-start space-x-2.5 cursor-pointer select-none" :class="keyForm.admin_locked ? 'opacity-50' : ''">
-                <input type="checkbox" x-model="keyForm.public_schedule_control" :disabled="!!keyForm.admin_locked" class="q-checkbox mt-0.5">
-                <span class="leading-tight">
-                  <span class="font-medium text-slate-800 dark:text-slate-200">允许访客启停调度</span>
-                  <span class="block text-[10.5px] text-slate-400 mt-0.5">勾选后在前台卡片展示调度开关，访客可点击启停；未勾选则前台隐藏开关</span>
-                </span>
+            <div class="space-y-2.5">
+              <!-- 权限项 1: 公开调度 -->
+              <label
+                class="flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none"
+                :class="keyForm.admin_locked ? 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20' : (keyForm.public_schedule_control ? 'border-teal-500/50 bg-teal-50/30 dark:bg-teal-950/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-700')"
+              >
+                <div class="min-w-0 pr-3">
+                  <div class="font-medium text-slate-800 dark:text-slate-100 text-xs">允许访客启停调度</div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">看板卡片展示调度开关，允许普通访客切换启停</div>
+                </div>
+                <input
+                  type="checkbox"
+                  x-model="keyForm.public_schedule_control"
+                  :disabled="!!keyForm.admin_locked"
+                  class="q-checkbox flex-shrink-0"
+                >
               </label>
-              <label class="flex items-start space-x-2.5 cursor-pointer select-none" :class="keyForm.admin_locked ? 'opacity-50' : ''">
-                <input type="checkbox" x-model="keyForm.public_recover_control" :disabled="!!keyForm.admin_locked" class="q-checkbox mt-0.5">
-                <span class="leading-tight">
-                  <span class="font-medium text-slate-800 dark:text-slate-200">允许访客恢复临时异常</span>
-                  <span class="block text-[10.5px] text-slate-400 mt-0.5">勾选后允许访客在接口限流时点击重试；不会解除管理员硬锁或手动停用</span>
-                </span>
+
+              <!-- 权限项 2: 公开恢复 -->
+              <label
+                class="flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none"
+                :class="keyForm.admin_locked ? 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20' : (keyForm.public_recover_control ? 'border-teal-500/50 bg-teal-50/30 dark:bg-teal-950/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-700')"
+              >
+                <div class="min-w-0 pr-3">
+                  <div class="font-medium text-slate-800 dark:text-slate-100 text-xs">允许访客恢复临时异常</div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">账号限流或临时不可用时，允许访客点击一键重试</div>
+                </div>
+                <input
+                  type="checkbox"
+                  x-model="keyForm.public_recover_control"
+                  :disabled="!!keyForm.admin_locked"
+                  class="q-checkbox flex-shrink-0"
+                >
               </label>
-              <label class="flex items-start space-x-2.5 cursor-pointer select-none pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60">
-                <input type="checkbox" x-model="keyForm.admin_locked" class="q-checkbox q-checkbox-rose mt-0.5">
-                <span class="leading-tight">
-                  <span class="font-medium text-rose-700 dark:text-rose-400">管理员硬锁（最高安全级别）</span>
-                  <span class="block text-[10.5px] text-slate-400 mt-0.5">勾选后强行锁定该账号，全面拒绝前台一切公开调度与恢复操作</span>
-                </span>
+
+              <!-- 权限项 3: 管理员硬锁 -->
+              <label
+                class="flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none"
+                :class="keyForm.admin_locked ? 'border-rose-400/60 bg-rose-50/40 dark:bg-rose-950/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-700'"
+              >
+                <div class="min-w-0 pr-3">
+                  <div class="font-medium text-rose-700 dark:text-rose-400 text-xs flex items-center gap-1.5">
+                    <span>管理员硬锁</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 font-semibold">最高安全级别</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">强制锁定该账号，全面拒绝前台一切公开调度与恢复操作</div>
+                </div>
+                <input
+                  type="checkbox"
+                  x-model="keyForm.admin_locked"
+                  class="q-checkbox q-checkbox-rose flex-shrink-0"
+                >
               </label>
             </div>
           </div>

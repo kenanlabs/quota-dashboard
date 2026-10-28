@@ -46,6 +46,16 @@ const cookieSecure = bool('COOKIE_SECURE', nodeEnv === 'production');
 if (nodeEnv === 'production' && !cookieSecure) {
   throw new Error('COOKIE_SECURE must be true in production');
 }
+
+// 支持将系统作为自定义页面内嵌到其他平台（iframe），默认允许（*），支持用空格或逗号分隔指定允许的父站点列表
+const allowedFrameAncestorsRaw = process.env.ALLOWED_FRAME_ANCESTORS ?? '*';
+const allowedFrameAncestors = (allowedFrameAncestorsRaw.trim() === 'none' || allowedFrameAncestorsRaw.trim() === "'none'")
+  ? ["'none'"]
+  : allowedFrameAncestorsRaw.split(/[\s,]+/).filter(Boolean);
+const allowEmbedding = !allowedFrameAncestors.includes("'none'");
+
+const cookieSameSite = (process.env.COOKIE_SAMESITE || 'strict').toLowerCase();
+
 const jwtSecret = required('JWT_SECRET', 32);
 const adminPassword = required('ADMIN_PASSWORD', 12);
 const controlTokenSecret = required('CONTROL_TOKEN_SECRET', 32);
@@ -81,6 +91,9 @@ const config = Object.freeze({
   dataEncryptionKey: encryptionKey(),
   cookieSecure,
   trustProxy,
+  allowedFrameAncestors,
+  allowEmbedding,
+  cookieSameSite,
   outboundAllowPrivate: bool('OUTBOUND_ALLOW_PRIVATE', false),
   outboundAllowHttp: bool('OUTBOUND_ALLOW_HTTP', false),
   snapshotRetentionDays: integer('SNAPSHOT_RETENTION_DAYS', 30, 1, 3650),

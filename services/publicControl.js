@@ -22,7 +22,7 @@ function ensurePublicSession(req, res) {
   const maxAge = 24 * 60 * 60 * 1000;
   const baseOptions = {
     secure: config.cookieSecure,
-    sameSite: 'strict',
+    sameSite: config.cookieSameSite,
     path: '/',
     maxAge
   };

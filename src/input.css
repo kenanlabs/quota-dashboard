@@ -90,7 +90,7 @@
     body[data-appearance="dark"] .bg-rose-50 { background-color: rgba(240, 123, 144, .13) !important; }
     body[data-appearance="dark"] .text-indigo-600 { color: #8fb7ff !important; }
     body[data-appearance="dark"] .bg-indigo-50 { background-color: rgba(143, 183, 255, .13) !important; }
-    body[data-appearance="dark"] input,
+    body[data-appearance="dark"] input:not([type="checkbox"]):not([type="radio"]),
     body[data-appearance="dark"] select,
     body[data-appearance="dark"] textarea { background-color: #0a1f31 !important; color: var(--q-body) !important; }
     body[data-appearance="dark"] ::-webkit-scrollbar-thumb { background: var(--q-line-strong); }
@@ -450,20 +450,25 @@
     /* 全局统一复选框 (Checkbox System)：彻底弃用浏览器原生复选框 */
     input[type="checkbox"],
     .q-checkbox {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
-      margin: 0;
-      border-radius: 5px;
-      border: 1.5px solid var(--q-line-strong);
-      background-color: var(--q-surface);
-      cursor: pointer;
-      display: inline-grid;
-      place-content: center;
-      position: relative;
-      flex-shrink: 0;
-      vertical-align: middle;
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      width: 17px !important;
+      height: 17px !important;
+      min-width: 17px !important;
+      min-height: 17px !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 5px !important;
+      border: 1.5px solid var(--q-line-strong) !important;
+      background-color: var(--q-surface) !important;
+      cursor: pointer !important;
+      display: inline-grid !important;
+      place-content: center !important;
+      position: relative !important;
+      flex-shrink: 0 !important;
+      vertical-align: middle !important;
+      box-sizing: border-box !important;
       transition: background-color var(--q-dur) var(--q-ease),
                   border-color var(--q-dur) var(--q-ease),
                   box-shadow var(--q-dur) var(--q-ease),
@@ -471,45 +476,45 @@
     }
     input[type="checkbox"]:hover,
     .q-checkbox:hover {
-      border-color: var(--q-teal);
-      background-color: var(--q-surface-muted);
+      border-color: var(--q-teal) !important;
+      background-color: var(--q-surface-muted) !important;
     }
     input[type="checkbox"]:active,
     .q-checkbox:active {
-      transform: scale(0.92);
+      transform: scale(0.92) !important;
     }
     input[type="checkbox"]:focus-visible,
     .q-checkbox:focus-visible {
-      outline: none;
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-teal) 45%, transparent);
+      outline: none !important;
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-teal) 45%, transparent) !important;
     }
     input[type="checkbox"]:checked,
     .q-checkbox:checked {
-      background-color: var(--q-teal);
-      border-color: var(--q-teal);
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: center;
-      background-size: 11px 11px;
+      background-color: var(--q-teal) !important;
+      border-color: var(--q-teal) !important;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: center !important;
+      background-size: 11px 11px !important;
     }
     input[type="checkbox"].q-checkbox-rose:hover,
     .q-checkbox-rose:hover {
-      border-color: var(--q-rose);
+      border-color: var(--q-rose) !important;
     }
     input[type="checkbox"].q-checkbox-rose:focus-visible,
     .q-checkbox-rose:focus-visible {
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-rose) 45%, transparent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-rose) 45%, transparent) !important;
     }
     input[type="checkbox"].q-checkbox-rose:checked,
     .q-checkbox-rose:checked {
-      background-color: var(--q-rose);
-      border-color: var(--q-rose);
+      background-color: var(--q-rose) !important;
+      border-color: var(--q-rose) !important;
     }
     input[type="checkbox"]:disabled,
     .q-checkbox:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      pointer-events: none;
+      opacity: 0.4 !important;
+      cursor: not-allowed !important;
+      pointer-events: none !important;
     }
     /* 弹性微交互与平滑动画 */
     .ease-spring {

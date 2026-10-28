@@ -36,7 +36,7 @@ function cookieOptions(maxAgeMs) {
   return {
     httpOnly: true,
     secure: config.cookieSecure,
-    sameSite: 'strict',
+    sameSite: config.cookieSameSite,
     path: '/',
     maxAge: maxAgeMs
   };
@@ -52,8 +52,8 @@ function setAdminSession(res, token, csrfToken) {
 }
 
 function clearAdminSession(res) {
-  res.clearCookie(ADMIN_COOKIE, { path: '/', sameSite: 'strict', secure: config.cookieSecure });
-  res.clearCookie(CSRF_COOKIE, { path: '/', sameSite: 'strict', secure: config.cookieSecure });
+  res.clearCookie(ADMIN_COOKIE, { path: '/', sameSite: config.cookieSameSite, secure: config.cookieSecure });
+  res.clearCookie(CSRF_COOKIE, { path: '/', sameSite: config.cookieSameSite, secure: config.cookieSecure });
 }
 
 function newCsrfToken() {

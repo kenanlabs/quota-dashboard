@@ -146,6 +146,7 @@ body[data-appearance="dark"] {
 ### 4.7 统一自定义复选框 (Checkbox System)
 - **彻底弃用原生外观**：全站复选框强制移除浏览器原生控件样式（`appearance: none; -webkit-appearance: none;`），消除多端操作系统控件渲染不一致、深色模式白底晃眼等体验断层。
 - **尺寸与圆角形态**：固定为 16×16px，微晶圆角 `rounded-[5px]`。
+- **强优先级保证**：核心渲染规则标注 `!important`，排除深色模式全局 input 背景覆盖，样式表引入带版本戳（`?v=...`）防止静态文件强缓存。
 - **未选中态**：描边为 1.5px `var(--q-line-strong)`，底色为当前卡片表面色 `var(--q-surface)`。鼠标悬停时产生品牌青碧色过渡高亮 `var(--q-teal)` 与次级底色。
 - **选中激活态**：
   - **常规/品牌项** (`.q-checkbox:checked`)：底色与边框充满品牌青碧色 `var(--q-teal)`，居中平滑淡入 11px 清晰纯白矢量平滑对勾（Checkmark）；
@@ -154,6 +155,7 @@ body[data-appearance="dark"] {
   - 点击按压具备 `scale(0.92)` 触感弹性压缩反馈；
   - 动效时长与缓动严格继承全局变量 `--q-dur` 与 `--q-ease`；
   - 键盘聚焦 `:focus-visible` 时环绕 2px 半透明呼吸焦点环，支持完全无障碍 Tab 导航。
+- **权限卡片开阔布局**：多项控制选项拒绝挤在窄小底框内，采用独立卡片条目（`p-3 rounded-xl border`）排布，标题与副标题精炼至单行，复选框右置垂直居中，具备充足呼吸感。
 
 ---
 
@@ -174,6 +176,10 @@ body[data-appearance="dark"] {
    - 一旦勾选管理员硬锁，无论是否开启访客启停调度或访客恢复异常，系统均全面拒绝前台一切公开调度与恢复尝试，且卡片上的调度开关自动隐藏。
 
 ### 5.1 安全设计约束
+- **支持作为自定义页面内嵌 (iframe Embedding)**：
+  - 默认开启外部嵌入支持（`ALLOWED_FRAME_ANCESTORS=*`），移除阻碍内嵌的 `X-Frame-Options: DENY`，将 CSP 的 `frame-ancestors` 放开给父站点，方便企业将看板直接嵌入到飞书/钉钉工作台、内部门户、低代码平台或自建控制台；
+  - 支持通过环境变量 `ALLOWED_FRAME_ANCESTORS` 限制仅允许指定父域名嵌入（如 `https://oa.mycompany.com`），或设为 `none` 完全禁止内嵌；
+  - 跨域嵌入时静态资源策略自动调整为 `cross-origin`，保障跨源宿主环境下图标与样式正常加载。
 - 管理员会话使用 HttpOnly、SameSite=Strict Cookie，状态变更接口必须校验双提交 CSRF Token。
 - 公开接口仅返回显隐配置允许的字段；隐藏账号的历史记录同样不可读取。
 - 外部请求必须使用 HTTPS 白名单校验、DNS 固定解析、私网地址拦截、零重定向和响应体大小上限。

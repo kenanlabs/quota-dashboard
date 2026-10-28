@@ -79,7 +79,8 @@ test('security boundaries and public capability flow', async t => {
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-security-policy') || '', /default-src 'self'/);
   assert.match(page.headers.get('content-security-policy') || '', /script-src-attr 'none'/);
-  assert.match(page.headers.get('x-frame-options') || '', /DENY/i);
+  assert.match(page.headers.get('content-security-policy') || '', /frame-ancestors \*/);
+  assert.equal(page.headers.get('x-frame-options'), null);
   const css = await fetch(`${baseUrl}/tailwind.css`);
   const alpine = await fetch(`${baseUrl}/vendor/alpine.min.js`);
   const appJs = await fetch(`${baseUrl}/app.js`);
