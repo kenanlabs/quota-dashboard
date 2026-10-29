@@ -30,7 +30,8 @@
   },
   "devDependencies": {
     "alpinejs": "^3.17.5",
-    "tailwindcss": "^3.4.19"
+    "tailwindcss": "^3.4.19",
+    "wawoff2": "^2.0.1"
   },
   "overrides": {
     "body-parser": "2.4.0",

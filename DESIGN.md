@@ -76,9 +76,16 @@ body[data-appearance="dark"] {
 
 ## 3. 字体与排版标准
 
-### 字体家族
-- **主字体**：`Inter`, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif；开启 `cv02, cv03, cv04, cv11` 现代变体。
-- **等宽数字**：`num-tabular` (`font-variant-numeric: tabular-nums`)，所有用量百分比、金额数字、倒计时与秒数严格等宽对齐。
+### 字体系统与粗细配置标准
+- **系统级配置与管理**：
+  - **全局默认字体 (`font_family`)**：支持在管理员后台「系统设置 ➔ 基础与外观」中配置，也可由访客在顶部快捷菜单自由切换。提供 `仓耳今楷` (`jinkai`，典雅楷书) 与 `系统默认黑体` (`system`，现代极简) 两档选择。
+  - **默认字体粗细 (`font_weight`)**：支持 `纤细常规` (`normal` · 400)、`适中清晰` (`medium` · 500 · 系统默认推荐) 与 `沉稳加粗` (`bold` · 600)。
+- **字重与视觉清晰度增强**：
+  - 系统内置双字重本地轻量缓存：`TsangerJinKai03-W03.woff2` (细楷) 与 `TsangerJinKai03-W04.woff2` (中楷 · 500-700)，通过 WOFF2 Brotli 压缩保持高加载性能。
+  - 针对 Windows 与不同 DPI 屏幕下细楷渲染偏浅偏细的问题，在 `medium` 适中档位启用 `-webkit-font-smoothing: subpixel-antialiased` 与 `-webkit-text-stroke: 0.16px currentColor`，在完全不失真的前提下提升文字实体骨力与对比度。
+- **容灾与回退策略**：
+  - 优先使用本地轻量 WOFF2；若浏览器不支持外部字体或加载异常，自动无缝降级回退至 `-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`。
+- **等宽数字**：`num-tabular` (`font-variant-numeric: tabular-nums`)，所有用量百分比、金额数字、倒计时与秒数严格等宽对齐，禁用 text-stroke 保持极致锐利。
 
 ### 排版层级表
 

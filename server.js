@@ -28,7 +28,7 @@ app.use(helmet({
       scriptSrcAttr: ["'none'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:'],
-      fontSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://gcore.jsdelivr.net', 'https://testingcf.jsdelivr.net'],
       connectSrc: ["'self'"],
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],
@@ -53,12 +53,19 @@ app.use((req, res, next) => {
 app.use(cookieParser());
 app.use(express.json({ limit: config.bodyLimit, strict: true }));
 
+app.use('/fonts', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   maxAge: config.isProduction ? '1h' : 0,
   setHeaders(res, filePath) {
-    if (filePath.endsWith('.html')) {
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
       res.set('Cache-Control', 'no-cache');
+    } else if (filePath.endsWith('.woff2') || filePath.endsWith('.woff') || filePath.endsWith('.ttf')) {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
     }
   }
 }));

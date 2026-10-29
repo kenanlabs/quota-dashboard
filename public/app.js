@@ -123,6 +123,17 @@ function dashboardApp() {
           { id: 'zinc', name: '极简黑白', desc: '中性极简美学', color: '#18181b', darkColor: '#fafafa' },
           { id: 'slate', name: '极客深蓝', desc: '沉浸科技深蓝', color: '#2563eb', darkColor: '#38bdf8' }
         ],
+        fontFamily: 'jinkai',
+        fontWeight: 'medium',
+        fontFamilyList: [
+          { id: 'jinkai', name: '仓耳今楷', desc: '典雅楷书 · 文化雅韵' },
+          { id: 'system', name: '系统默认黑体', desc: '现代极简 · 无衬线' }
+        ],
+        fontWeightList: [
+          { id: 'normal', name: '纤细常规', desc: '原始纤秀笔画 (400)' },
+          { id: 'medium', name: '适中清晰', desc: '饱满清晰 (500，推荐)' },
+          { id: 'bold', name: '沉稳加粗', desc: '浓墨醒目 (600)' }
+        ],
         resolvedAppearance: 'light',
         themeMedia: null,
         tooltipElement: null,
@@ -338,7 +349,13 @@ function dashboardApp() {
               if (!localStorage.getItem('quotaThemePalette') && json.data.theme_palette) {
                 this.themePalette = ['teal', 'zinc', 'slate'].includes(json.data.theme_palette) ? json.data.theme_palette : 'teal';
               }
-            }
+                          if (!localStorage.getItem('quotaFontFamily') && json.data.font_family) {
+                this.fontFamily = ['jinkai', 'system'].includes(json.data.font_family) ? json.data.font_family : 'jinkai';
+              }
+              if (!localStorage.getItem('quotaFontWeight') && json.data.font_weight) {
+                this.fontWeight = ['normal', 'medium', 'bold'].includes(json.data.font_weight) ? json.data.font_weight : 'medium';
+              }
+}
           } catch (err) {
             console.error('Fetch settings error:', err);
           } finally {
@@ -361,6 +378,10 @@ function dashboardApp() {
           this.themeMode = ['light', 'dark', 'auto'].includes(savedMode) ? savedMode : (this.settings.theme_mode || 'auto');
           const savedPalette = localStorage.getItem('quotaThemePalette');
           this.themePalette = ['teal', 'zinc', 'slate'].includes(savedPalette) ? savedPalette : (this.settings.theme_palette || 'teal');
+          const savedFontFamily = localStorage.getItem('quotaFontFamily');
+          this.fontFamily = ['jinkai', 'system'].includes(savedFontFamily) ? savedFontFamily : (this.settings.font_family || 'jinkai');
+          const savedFontWeight = localStorage.getItem('quotaFontWeight');
+          this.fontWeight = ['normal', 'medium', 'bold'].includes(savedFontWeight) ? savedFontWeight : (this.settings.font_weight || 'medium');
           this.themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
           this.themeMedia.addEventListener('change', () => {
             if (this.themeMode === 'auto') this.applyThemeMode();
@@ -382,6 +403,22 @@ function dashboardApp() {
           localStorage.setItem('quotaThemePalette', palette);
           const found = this.themePaletteList.find(p => p.id === palette);
           this.showToast(`已切换至「${found?.name || palette}」配色`);
+        },
+
+        setFontFamily(family) {
+          if (!['jinkai', 'system'].includes(family)) return;
+          this.fontFamily = family;
+          localStorage.setItem('quotaFontFamily', family);
+          const found = this.fontFamilyList.find(f => f.id === family);
+          this.showToast(`已切换字体：${found?.name || family}`);
+        },
+
+        setFontWeight(weight) {
+          if (!['normal', 'medium', 'bold'].includes(weight)) return;
+          this.fontWeight = weight;
+          localStorage.setItem('quotaFontWeight', weight);
+          const found = this.fontWeightList.find(w => w.id === weight);
+          this.showToast(`已调整字体粗细：${found?.name || weight}`);
         },
 
         applyThemeMode() {
@@ -691,6 +728,8 @@ function dashboardApp() {
               }
               if (this.settingsForm.theme_mode === undefined) this.settingsForm.theme_mode = 'auto';
               if (this.settingsForm.theme_palette === undefined) this.settingsForm.theme_palette = 'teal';
+              if (this.settingsForm.font_family === undefined) this.settingsForm.font_family = this.fontFamily || 'jinkai';
+              if (this.settingsForm.font_weight === undefined) this.settingsForm.font_weight = this.fontWeight || 'medium';
               this.settingsForm.sub2api_admin_api_key ||= '';
               this.settingsForm.sub2api_control_api_key ||= '';
               this.settingsForm.sub2api_admin_api_key_clear = false;
@@ -892,6 +931,14 @@ function dashboardApp() {
             const json = await res.json();
             if (json.success) {
               await this.fetchSettings();
+              if (this.settingsForm.font_family) {
+                this.fontFamily = this.settingsForm.font_family;
+                localStorage.setItem('quotaFontFamily', this.fontFamily);
+              }
+              if (this.settingsForm.font_weight) {
+                this.fontWeight = this.settingsForm.font_weight;
+                localStorage.setItem('quotaFontWeight', this.fontWeight);
+              }
               this.startCountdown();
               this.showSettingsModal = false;
               this.showToast('系统设置已保存');

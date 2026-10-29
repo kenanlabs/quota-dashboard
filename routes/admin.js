@@ -551,6 +551,8 @@ router.put('/settings', async (req, res) => {
       if (input.refresh_interval !== undefined) setSetting(db, 'refresh_interval', input.refresh_interval);
       if (input.theme_mode !== undefined) setSetting(db, 'theme_mode', input.theme_mode);
       if (input.theme_palette !== undefined) setSetting(db, 'theme_palette', input.theme_palette);
+      if (input.font_family !== undefined) setSetting(db, 'font_family', input.font_family);
+      if (input.font_weight !== undefined) setSetting(db, 'font_weight', input.font_weight);
       if (input.visible_fields !== undefined) setSetting(db, 'visible_fields', JSON.stringify(input.visible_fields));
       if (input.sub2api_url !== undefined) setSetting(db, SUB2API_URL, nextUrl);
       if (input.sub2api_sync_interval !== undefined) {

@@ -50,6 +50,8 @@ const settingsSchema = z.object({
   refresh_interval: z.coerce.number().int().min(60).max(86400).optional(),
   theme_mode: z.enum(['light', 'dark', 'auto']).optional(),
   theme_palette: z.enum(['teal', 'zinc', 'slate']).optional(),
+  font_family: z.enum(['jinkai', 'system']).optional(),
+  font_weight: z.enum(['normal', 'medium', 'bold']).optional(),
   visible_fields: z.record(z.string(), z.boolean()).optional(),
   sub2api_url: z.string().trim().max(500).optional(),
   sub2api_sync_interval: z.coerce.number().int().min(60).max(86400).optional(),

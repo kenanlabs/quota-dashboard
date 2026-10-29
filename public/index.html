@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quota Dashboard - API Key 用量监控平台</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/tailwind.css?v=20261028l">
+  <link rel="preload" href="/fonts/TsangerJinKai03-W03.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/TsangerJinKai03-W04.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/tailwind.css?v=20261028q">
   <script defer src="/vendor/alpine.min.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen antialiased" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance" :data-theme-palette="themePalette">
+<body class="bg-slate-50 text-slate-800 min-h-screen antialiased" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance" :data-theme-palette="themePalette" :data-font-family="fontFamily" :data-font-weight="fontWeight">
   <div id="app-tooltip" role="tooltip" aria-hidden="true"></div>
 
   <!-- Toast 通知 -->
@@ -195,6 +197,41 @@
                   <span x-text="p.name"></span>
                 </span>
                 <span x-show="themePalette === p.id" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400"></span>
+              </button>
+            </template>
+            <!-- 字体选择 -->
+            <div class="my-1 border-t border-slate-100 dark:border-slate-700"></div>
+            <div class="px-3 py-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">显示字体</div>
+            <template x-for="f in fontFamilyList" :key="f.id">
+              <button
+                type="button"
+                @click="setFontFamily(f.id); themeOpen = false"
+                class="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+                :class="fontFamily === f.id ? 'text-teal-700 dark:text-teal-400 font-bold bg-teal-50/60 dark:bg-teal-950/40' : 'text-slate-600 dark:text-slate-300'"
+              >
+                <span class="flex items-center gap-2">
+                  <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 5v14m6-7h6m-3-7v14"/></svg>
+                  <span x-text="f.name"></span>
+                </span>
+                <span x-show="fontFamily === f.id" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400"></span>
+              </button>
+            </template>
+
+            <!-- 字体粗细 -->
+            <div class="my-1 border-t border-slate-100 dark:border-slate-700"></div>
+            <div class="px-3 py-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">字体粗细</div>
+            <template x-for="w in fontWeightList" :key="w.id">
+              <button
+                type="button"
+                @click="setFontWeight(w.id); themeOpen = false"
+                class="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+                :class="fontWeight === w.id ? 'text-teal-700 dark:text-teal-400 font-bold bg-teal-50/60 dark:bg-teal-950/40' : 'text-slate-600 dark:text-slate-300'"
+              >
+                <span class="flex items-center gap-2">
+                  <span class="w-3.5 text-center font-bold" :class="w.id === 'bold' ? 'text-sm' : (w.id === 'medium' ? 'text-xs' : 'text-[11px] font-normal')">B</span>
+                  <span x-text="w.name"></span>
+                </span>
+                <span x-show="fontWeight === w.id" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400"></span>
               </button>
             </template>
           </div>
@@ -1064,6 +1101,45 @@
             </div>
           </div>
           <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-2">全局默认字体 (Font Family)</label>
+            <div class="grid grid-cols-2 gap-2">
+              <template x-for="f in fontFamilyList" :key="f.id">
+                <button
+                  type="button"
+                  @click="settingsForm.font_family = f.id; setFontFamily(f.id)"
+                  class="p-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-between"
+                  :class="(settingsForm.font_family || 'jinkai') === f.id ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+                >
+                  <div class="text-left leading-tight">
+                    <div class="truncate font-bold" x-text="f.name"></div>
+                    <div class="text-[10px] text-slate-400 font-normal truncate" x-text="f.desc"></div>
+                  </div>
+                  <span x-show="(settingsForm.font_family || 'jinkai') === f.id" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400 flex-shrink-0"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-2">默认字体粗细 (微调字体清晰饱满度)</label>
+            <div class="grid grid-cols-3 gap-2">
+              <template x-for="w in fontWeightList" :key="w.id">
+                <button
+                  type="button"
+                  @click="settingsForm.font_weight = w.id; setFontWeight(w.id)"
+                  class="p-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-between"
+                  :class="(settingsForm.font_weight || 'medium') === w.id ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+                >
+                  <div class="text-left leading-tight">
+                    <div class="truncate font-bold" x-text="w.name"></div>
+                    <div class="text-[10px] text-slate-400 font-normal truncate" x-text="w.desc"></div>
+                  </div>
+                  <span x-show="(settingsForm.font_weight || 'medium') === w.id" class="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400 flex-shrink-0"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+          <div>
             <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">系统图标 (Icon)</label>
             <div class="flex items-center space-x-3 mb-2">
               <div class="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1.5 flex items-center justify-center shadow-xs">
@@ -1196,11 +1272,10 @@
               </button>
             </div>
             <p class="mt-1 text-[10.5px] leading-relaxed text-slate-400">
-              这不是普通用户调用模型的 API Key。Sub2API 发布版 v0.2.18 仍没有受限密钥；若你使用包含该功能的开发版，
-              可在「系统设置 → 安全 → 管理员访问密钥」创建
+              这不是普通用户调用模型的 API Key。Sub2API v0.2.19+ 已正式支持受限密钥：请在 Sub2API「系统设置 → 安全 → 管理员访问密钥」点击「创建受限密钥」，
               <span class="font-mono">adm_sc_</span> 受限管理员 Key，只授予 <span class="font-mono">accounts.read</span>、
               <span class="font-mono">accounts.status</span>、<span class="font-mono">accounts.recover</span>。
-              若版本不支持受限 Key，请留空以复用管理员 Key；服务端只会调用固定的账号读取、调度和恢复接口，管理员 Key不会返回浏览器。
+              旧版本若不支持受限 Key 可留空，系统会自动以最小权限调用管理员 Key。
             </p>
             <p class="mt-1 text-[10.5px] text-slate-400">管理员 Key和独立控制 Key均未配置时，公开卡片只允许查看，不会显示调度与恢复操作。</p>
             <p
@@ -1505,6 +1580,6 @@
       </div>
     </div>
   </div>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=20261028q"></script>
 </body>
 </html>

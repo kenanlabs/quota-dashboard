@@ -12,6 +12,8 @@ const PUBLIC_KEYS = new Set([
   'refresh_interval',
   'theme_mode',
   'theme_palette',
+  'font_family',
+  'font_weight',
   'visible_fields',
   'announcement'
 ]);
@@ -121,6 +123,8 @@ function publicSettings(db) {
     refresh_interval: Math.max(60, Number.parseInt(getSetting(db, 'refresh_interval'), 10) || 300),
     theme_mode: getSetting(db, 'theme_mode') || 'auto',
     theme_palette: getSetting(db, 'theme_palette') || 'teal',
+    font_family: getSetting(db, 'font_family') || 'jinkai',
+    font_weight: getSetting(db, 'font_weight') || 'medium',
     visible_fields: visibleFields(db)
   };
 }

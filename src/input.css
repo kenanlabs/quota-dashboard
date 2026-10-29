@@ -2,6 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --- 仓耳今楷字体系统 (Tsanger JinKai Font System) --- */
+/* 常规/细楷 (Weight 400) */
+@font-face {
+  font-family: '仓耳今楷';
+  src: url('/fonts/TsangerJinKai03-W03.woff2') format('woff2'),
+       url('/fonts/TsangerJinKai03-W03.ttf') format('truetype'),
+       url('https://gcore.jsdelivr.net/gh/FlamieLin/TsangerJinKai@main/%E4%BB%93%E8%80%B3%E4%BB%8A%E6%A5%B703-W03.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 中楷/加粗清晰 (Weight 500-700) - 解决文字偏细问题 */
+@font-face {
+  font-family: '仓耳今楷';
+  src: url('/fonts/TsangerJinKai03-W04.woff2') format('woff2'),
+       url('/fonts/TsangerJinKai03-W04.ttf') format('truetype'),
+       url('https://gcore.jsdelivr.net/gh/FlamieLin/TsangerJinKai@main/%E4%BB%93%E8%80%B3%E4%BB%8A%E6%A5%B703-W04.ttf') format('truetype');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TsangerJinKai';
+  src: url('/fonts/TsangerJinKai03-W03.woff2') format('woff2'),
+       url('/fonts/TsangerJinKai03-W03.ttf') format('truetype'),
+       url('https://gcore.jsdelivr.net/gh/FlamieLin/TsangerJinKai@main/%E4%BB%93%E8%80%B3%E4%BB%8A%E6%A5%B703-W03.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TsangerJinKai';
+  src: url('/fonts/TsangerJinKai03-W04.woff2') format('woff2'),
+       url('/fonts/TsangerJinKai03-W04.ttf') format('truetype'),
+       url('https://gcore.jsdelivr.net/gh/FlamieLin/TsangerJinKai@main/%E4%BB%93%E8%80%B3%E4%BB%8A%E6%A5%B703-W04.ttf') format('truetype');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 [x-cloak] { display: none !important; }
     :root {
       --q-canvas: #f5f1e8;
@@ -276,10 +319,43 @@
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      font-family: '仓耳今楷', 'TsangerJinKai', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
       font-feature-settings: "cv02", "cv03", "cv04", "cv11";
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* --- 字体偏好与粗细档位调节 (Font Family & Weight Controls) --- */
+    body[data-font-family="system"],
+    body[data-font-family="system"] *:not(.num-tabular):not(code):not(pre):not([class*="font-mono"]) {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif !important;
+    }
+
+    /* 粗细三档微调：解决默认文字在部分屏幕上偏细的问题 */
+    body[data-font-weight="normal"] {
+      font-weight: 400;
+      -webkit-font-smoothing: antialiased;
+      -webkit-text-stroke: 0 !important;
+    }
+
+    body[data-font-weight="medium"],
+    body:not([data-font-weight]) {
+      font-weight: 500;
+      -webkit-font-smoothing: subpixel-antialiased;
+      -webkit-text-stroke: 0.22px currentColor;
+      text-rendering: optimizeLegibility;
+    }
+
+    body[data-font-weight="bold"] {
+      font-weight: 600;
+      -webkit-font-smoothing: subpixel-antialiased;
+      -webkit-text-stroke: 0.44px currentColor;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* 保护数字与代码不受 text-stroke 影响，保持数字纯正等宽锐利 */
+    .num-tabular, code, pre, .font-mono, [class*="font-mono"], .q-meter {
+      -webkit-text-stroke: 0 !important;
     }
     body {
       background: var(--q-canvas);
