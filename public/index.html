@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/tailwind.css?v=20261030a">
   <script defer src="/vendor/alpine.min.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen antialiased" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance" :data-theme-palette="themePalette" :data-font-family="fontFamily" :data-font-weight="fontWeight">
+<body class="bg-slate-50 text-slate-800 min-h-screen" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance" :data-theme-palette="themePalette" :data-font-family="fontFamily" :data-font-weight="fontWeight">
   <div id="app-tooltip" role="tooltip" aria-hidden="true"></div>
 
   <!-- Toast 通知 -->
@@ -46,7 +46,7 @@
 
   <!-- 顶部导航栏 -->
   <header class="bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 backdrop-blur-md">
-    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex h-14 items-center justify-between gap-2 sm:h-16 lg:gap-3">
+    <div class="max-w-[1680px] mx-auto px-3 sm:px-6 lg:px-8 flex h-14 items-center justify-between gap-2 sm:h-16 lg:gap-3">
       <div class="flex min-w-0 items-center gap-2 lg:gap-2.5">
         <div class="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shadow-2xs flex-shrink-0">
           <img x-show="settingsLoaded" :src="settings.site_icon" :alt="settings.site_title" class="w-full h-full object-contain">
@@ -80,6 +80,18 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
           </svg>
           <span class="hidden md:inline" x-text="loading ? '刷新中...' : '刷新数据'"></span>
+        </button>
+
+        <!-- 全站当日用户用量排行 -->
+        <button
+          type="button"
+          @click="openUserRanking()"
+          class="nav-pill"
+        >
+          <svg class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m6 10V5m6 14v-7m4 7H2"/>
+          </svg>
+          <span class="hidden md:inline">用量排行</span>
         </button>
 
         <!-- 排序 -->
@@ -248,7 +260,7 @@
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
             </svg>
-            <span class="hidden md:inline">登录管理</span>
+            <span class="hidden md:inline">登录</span>
           </button>
         </template>
 
@@ -288,7 +300,7 @@
   </header>
 
   <!-- 主内容区 -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 q-enter">
+  <main class="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 q-enter">
 
     <!-- 顶部全站公告 (Markdown 格式，默认莫显示，仅管理员配置内容后呈现) -->
     <div
@@ -639,7 +651,7 @@
                   class="q-foot"
                   x-show="settings.visible_fields?.reset_time !== false && item.usage?.reset_monthly"
                   :data-tooltip="'月度额度重置时间：' + formatResetDateTime(item.usage?.reset_monthly)"
-                  x-text="formatResetTime(item.usage?.reset_monthly) + ' · ' + formatResetDateTime(item.usage?.reset_monthly)"
+                  x-text="formatResetTime(item.usage?.reset_monthly)"
                 ></div>
                 <div class="q-foot" x-show="settings.visible_fields?.reset_time === false || !item.usage?.reset_monthly">月度重置限额</div>
               </div>
@@ -757,6 +769,143 @@
       </div>
     </div>
   </main>
+
+  <!-- 全站当日用户用量排行 Modal -->
+  <div
+    x-show="showUserRankingModal"
+    x-transition:enter="transition ease-spring duration-180"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition ease-spring duration-120"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+    x-cloak
+    @mousedown.self="closeUserRanking()"
+    @keydown.escape.window="closeUserRanking()"
+  >
+    <div
+      x-show="showUserRankingModal"
+      x-transition:enter="transition ease-spring duration-250"
+      x-transition:enter-start="opacity-0 scale-95 translate-y-3"
+      x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+      x-transition:leave="transition ease-spring duration-180"
+      x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+      x-transition:leave-end="opacity-0 scale-95 translate-y-3"
+      class="bg-white dark:bg-slate-900 rounded-2xl max-w-5xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col overflow-hidden"
+    >
+      <div class="px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m6 10V5m6 14v-7m4 7H2"/>
+                </svg>
+              </span>
+              今日用户用量排行
+            </h3>
+            <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+              全站用户 · 按总 Token 降序 · 全部有记录用户
+            </p>
+          </div>
+          <button
+            type="button"
+            @click="closeUserRanking()"
+            class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="关闭用量排行"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6">
+        <div x-show="userRankingLoading" class="space-y-2" x-cloak>
+          <template x-for="i in 6" :key="'rank-loading-' + i">
+            <div class="h-12 rounded-xl bg-slate-100 dark:bg-slate-800/70 animate-pulse"></div>
+          </template>
+        </div>
+
+        <div
+          x-show="!userRankingLoading && userRankingError"
+          x-cloak
+          class="rounded-xl border border-rose-200 dark:border-rose-900/70 bg-rose-50 dark:bg-rose-950/30 px-4 py-8 text-center"
+        >
+          <p class="text-sm font-semibold text-rose-700 dark:text-rose-300" x-text="userRankingError"></p>
+          <button
+            type="button"
+            @click="fetchUserRanking()"
+            class="mt-3 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 transition"
+          >重新加载</button>
+        </div>
+
+        <div
+          x-show="!userRankingLoading && !userRankingError && userRankingUsers.length === 0"
+          x-cloak
+          class="py-14 text-center text-sm text-slate-400 dark:text-slate-500"
+        >
+          今日暂无用户消耗记录
+        </div>
+
+        <div
+          x-show="!userRankingLoading && !userRankingError && userRankingUsers.length > 0"
+          x-cloak
+          class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800"
+        >
+          <table class="w-full min-w-[760px] text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/80">
+              <tr class="text-slate-500 dark:text-slate-400">
+                <th class="px-4 py-3 text-left font-semibold">#</th>
+                <th class="px-4 py-3 text-left font-semibold">用户</th>
+                <th class="px-4 py-3 text-right font-semibold">请求</th>
+                <th class="px-4 py-3 text-right font-semibold">输入 Token</th>
+                <th class="px-4 py-3 text-right font-semibold">输出 Token</th>
+                <th class="px-4 py-3 text-right font-semibold">缓存 Token</th>
+                <th class="px-4 py-3 text-right font-semibold text-teal-700 dark:text-teal-400">总 Token</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+              <template x-for="(user, index) in userRankingUsers" :key="user.user_id">
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                  <td class="px-4 py-3">
+                    <span
+                      class="inline-flex h-6 min-w-6 px-1.5 items-center justify-center rounded-full text-[11px] font-bold num-tabular"
+                      :class="getRankBadgeClass(index)"
+                      x-text="index + 1"
+                    ></span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="font-semibold text-slate-800 dark:text-slate-100" x-text="user.username"></div>
+                    <div class="mt-0.5 text-[10px] text-slate-400" x-text="'#' + user.user_id"></div>
+                  </td>
+                  <td class="px-4 py-3 text-right num-tabular text-slate-600 dark:text-slate-300" x-text="formatInteger(user.requests)"></td>
+                  <td class="px-4 py-3 text-right num-tabular text-slate-600 dark:text-slate-300" :data-tooltip="formatInteger(user.input_tokens) + ' tokens'" x-text="formatCompactToken(user.input_tokens)"></td>
+                  <td class="px-4 py-3 text-right num-tabular text-slate-600 dark:text-slate-300" :data-tooltip="formatInteger(user.output_tokens) + ' tokens'" x-text="formatCompactToken(user.output_tokens)"></td>
+                  <td class="px-4 py-3 text-right num-tabular text-slate-600 dark:text-slate-300" :data-tooltip="formatInteger(user.cache_tokens) + ' tokens'" x-text="formatCompactToken(user.cache_tokens)"></td>
+                  <td class="px-4 py-3 text-right num-tabular font-bold text-teal-700 dark:text-teal-400" :data-tooltip="formatInteger(user.total_tokens) + ' tokens'" x-text="formatCompactToken(user.total_tokens)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="px-6 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-shrink-0 bg-slate-50/70 dark:bg-slate-800/60">
+        <span
+          class="text-[11px] text-slate-400 dark:text-slate-500"
+          x-text="userRankingMeta ? ('统计日期：' + userRankingMeta.start_date + ' · ' + userRankingMeta.user_count + ' 位用户') : '数据来源：Sub2API 用户排行'"
+        ></span>
+        <button
+          type="button"
+          @click="closeUserRanking()"
+          class="px-4 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+        >关闭</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 登录 Modal -->
   <div

@@ -436,6 +436,161 @@ async function syncTodayStatsForEnabledKeys(db) {
   return syncTodayStatsForAccounts(db, accountIds);
 }
 
+const USER_IDENTITY_CACHE_TTL_MS = 10 * 60 * 1000;
+const USER_IDENTITY_CACHE_LIMIT = 2000;
+const USER_RANKING_CACHE_TTL_MS = 60 * 1000;
+const userIdentityCache = new Map();
+const userRankingCache = new Map();
+
+function shanghaiDate(offsetDays = 0) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  const date = new Date(Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day) + offsetDays
+  ));
+  return date.toISOString().slice(0, 10);
+}
+
+function resolveUserRankingDateRange(range) {
+  const offset = range === '30d' ? -29 : range === '7d' ? -6 : 0;
+  return {
+    range: range === '30d' || range === '7d' ? range : 'today',
+    startDate: shanghaiDate(offset),
+    endDate: shanghaiDate(0)
+  };
+}
+
+function normalizeTokenCount(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
+function parseUserRanking(payload) {
+  const data = payload && payload.data !== undefined ? payload.data : payload;
+  const rawUsers = data && Array.isArray(data.users) ? data.users : [];
+  return rawUsers.map(item => {
+    const inputTokens = normalizeTokenCount(item && item.input_tokens);
+    const outputTokens = normalizeTokenCount(item && item.output_tokens);
+    const cacheTokens = normalizeTokenCount(item && item.cache_tokens);
+    const totalTokens = normalizeTokenCount(item && item.total_tokens) ||
+      inputTokens + outputTokens + cacheTokens;
+    return {
+      user_id: Number(item && item.user_id) || 0,
+      username: '',
+      email: String((item && item.email) || '').trim().slice(0, 320),
+      requests: normalizeTokenCount(item && item.requests),
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cache_tokens: cacheTokens,
+      total_tokens: totalTokens
+    };
+  }).filter(item => item.user_id > 0);
+}
+
+async function fetchAdminUserIdentity(baseUrl, apiKey, userId) {
+  const cacheKey = `${baseUrl}:${userId}`;
+  const cached = userIdentityCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  let value = { username: '', email: '' };
+  try {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/users/${userId}`, {
+      params: { include_deleted: true },
+      headers: getAuthHeaders(apiKey),
+      timeout: 10000
+    });
+    const data = res.data && res.data.data !== undefined ? res.data.data : res.data;
+    if (data && typeof data === 'object') {
+      value = {
+        username: String(data.username || '').trim().slice(0, 160),
+        email: String(data.email || '').trim().slice(0, 320)
+      };
+    }
+  } catch (_) {
+    // Ranking remains usable with the upstream email when identity lookup fails.
+  }
+
+  if (userIdentityCache.size >= USER_IDENTITY_CACHE_LIMIT) {
+    const oldestKey = userIdentityCache.keys().next().value;
+    if (oldestKey) userIdentityCache.delete(oldestKey);
+  }
+  userIdentityCache.set(cacheKey, {
+    value,
+    expiresAt: Date.now() + USER_IDENTITY_CACHE_TTL_MS
+  });
+  return value;
+}
+
+/**
+ * 获取全站用户 Token 消耗排行（不含费用字段）。
+ */
+async function fetchUserTokenRanking(db, range = 'today') {
+  const { url, key } = getSub2apiAdminCredentials(db);
+  if (!url || !key) {
+    throw clientError('尚未配置 Sub2API 服务地址或管理员 API Key', 503);
+  }
+
+  const baseUrl = normalizeUrl(url);
+  const dates = resolveUserRankingDateRange(range);
+  const rankingCacheKey = `${baseUrl}:${dates.range}`;
+  const cachedRanking = userRankingCache.get(rankingCacheKey);
+  if (cachedRanking && cachedRanking.expiresAt > Date.now()) {
+    return cachedRanking.value;
+  }
+
+  let res;
+  try {
+    res = await safeGet(`${baseUrl}/api/v1/admin/dashboard/user-breakdown`, {
+      params: {
+        start_date: dates.startDate,
+        end_date: dates.endDate,
+        sort_by: 'total_tokens',
+        limit: 200,
+        timezone: 'Asia/Shanghai'
+      },
+      headers: getAuthHeaders(key),
+      timeout: 20000
+    });
+  } catch (err) {
+    throw clientError(formatSub2apiError(err));
+  }
+
+  const parsed = parseUserRanking(res.data);
+  const users = await mapWithConcurrency(parsed, 4, async item => {
+    const identity = await fetchAdminUserIdentity(baseUrl, key, item.user_id);
+    const username = identity.username || `用户 #${item.user_id}`;
+    return {
+      user_id: item.user_id,
+      username,
+      requests: item.requests,
+      input_tokens: item.input_tokens,
+      output_tokens: item.output_tokens,
+      cache_tokens: item.cache_tokens,
+      total_tokens: item.total_tokens
+    };
+  });
+
+  const ranking = {
+    range: dates.range,
+    start_date: dates.startDate,
+    end_date: dates.endDate,
+    user_count: users.length,
+    users
+  };
+  userRankingCache.set(rankingCacheKey, {
+    value: ranking,
+    expiresAt: Date.now() + USER_RANKING_CACHE_TTL_MS
+  });
+  return ranking;
+}
+
 /**
  * 匹配某个 Key 在 Sub2API 中对应的分组列表
  * @param {object} keyRecord - { id, provider, display_name, api_key, sub2api_account_id }
@@ -1332,6 +1487,9 @@ module.exports = {
   fetchTodayStatsBatch,
   syncTodayStatsForAccounts,
   syncTodayStatsForEnabledKeys,
+  resolveUserRankingDateRange,
+  parseUserRanking,
+  fetchUserTokenRanking,
   fetchSub2apiAccounts,
   importSub2apiAccountsByIds,
   detectProvider,

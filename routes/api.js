@@ -19,7 +19,7 @@ const { enforcePublicControlPolicy } = require('../services/controlPolicy');
 const { withKeyLock } = require('../services/keyedLock');
 const { writeAudit } = require('../services/audit');
 const { errorResponse, badRequest } = require('../services/httpErrors');
-const { apiReadLimiter, publicControlLimiter } = require('../middleware/rateLimits');
+const { apiReadLimiter, publicControlLimiter, sub2apiLimiter } = require('../middleware/rateLimits');
 const { assessAccountRisk, summarizeAccountRisks } = require('../services/accountRisk');
 const {
   publicScheduleSchema,
@@ -314,6 +314,18 @@ router.get('/usage/:id/history', apiReadLimiter, (req, res) => {
     return res.json({ success: true, data: history });
   } catch (err) {
     return errorResponse(res, err, 'public.history');
+  }
+});
+
+router.get('/usage/user-ranking', sub2apiLimiter, async (req, res) => {
+  try {
+    const ranking = await require('../services/sub2api').fetchUserTokenRanking(db, 'today');
+    return res.json({
+      success: true,
+      data: ranking
+    });
+  } catch (err) {
+    return errorResponse(res, err, 'public.usage.user-ranking');
   }
 });
 

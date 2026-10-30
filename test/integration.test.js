@@ -106,6 +106,10 @@ test('security boundaries and public capability flow', async t => {
 
   const publicRefresh = await jsonFetch(`${baseUrl}/api/usage/refresh`, { method: 'POST' });
   assert.equal(publicRefresh.response.status, 404);
+  const publicRanking = await jsonFetch(`${baseUrl}/api/admin/usage/user-ranking`);
+  assert.equal(publicRanking.response.status, 401);
+  const publicUserRanking = await jsonFetch(`${baseUrl}/api/usage/user-ranking`);
+  assert.equal(publicUserRanking.response.status, 503);
 
   const forgedToken = jwt.sign(
     { id: 1, username: 'admin', ver: 0 },

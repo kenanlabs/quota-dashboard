@@ -16,6 +16,12 @@ function dashboardApp() {
         refreshingKeys: {},
         togglingSchedule: {},
         clearingErrorId: null,
+        showUserRankingModal: false,
+        userRankingLoading: false,
+        userRankingError: '',
+        userRankingUsers: [],
+        userRankingMeta: null,
+        userRankingRequestId: 0,
         countdown: 60,
         timer: null,
         searchQuery: '',
@@ -141,7 +147,7 @@ function dashboardApp() {
         fontWeightList: [
           { id: 'normal', name: '纤细常规', desc: '原始纤秀笔画 (400)' },
           { id: 'medium', name: '适中清晰', desc: '饱满清晰 (500，推荐)' },
-          { id: 'bold', name: '沉稳加粗', desc: '浓墨醒目 (600)' }
+          { id: 'bold', name: '沉稳加粗', desc: '浓墨醒目 (700)' }
         ],
         resolvedAppearance: 'light',
         themeMedia: null,
@@ -650,6 +656,55 @@ function dashboardApp() {
           } finally {
             this.clearingErrorId = null;
           }
+        },
+
+        openUserRanking() {
+          this.userRankingUsers = [];
+          this.userRankingMeta = null;
+          this.userRankingError = '';
+          this.showUserRankingModal = true;
+          this.fetchUserRanking();
+        },
+
+        closeUserRanking() {
+          this.userRankingRequestId++;
+          this.showUserRankingModal = false;
+          this.userRankingLoading = false;
+        },
+
+        async fetchUserRanking() {
+          const requestId = ++this.userRankingRequestId;
+          this.userRankingLoading = true;
+          this.userRankingError = '';
+          try {
+            const res = await fetch('/api/usage/user-ranking', { credentials: 'same-origin' });
+            const json = await res.json();
+            if (requestId !== this.userRankingRequestId) return;
+            if (!json.success) {
+              this.userRankingError = json.error || '获取用户排行失败';
+              this.userRankingUsers = [];
+              this.userRankingMeta = null;
+              return;
+            }
+            this.userRankingUsers = json.data?.users || [];
+            this.userRankingMeta = json.data || null;
+          } catch (err) {
+            if (requestId !== this.userRankingRequestId) return;
+            this.userRankingError = '请求异常: ' + err.message;
+            this.userRankingUsers = [];
+            this.userRankingMeta = null;
+          } finally {
+            if (requestId === this.userRankingRequestId) {
+              this.userRankingLoading = false;
+            }
+          }
+        },
+
+        getRankBadgeClass(index) {
+          if (index === 0) return 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300';
+          if (index === 1) return 'bg-slate-200 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300';
+          if (index === 2) return 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300';
+          return 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
         },
 
         setUsageDisplayMode(mode) {
@@ -1504,6 +1559,16 @@ function dashboardApp() {
           if (!Number.isFinite(value)) return '—';
           const millions = Math.max(0, value) / 1000000;
           return `${millions.toFixed(millions >= 100 ? 1 : 2)}M`;
+        },
+
+        formatCompactToken(value) {
+          const number = Number(value);
+          if (!Number.isFinite(number)) return '—';
+          const count = Math.max(0, number);
+          if (count >= 1000000000) return `${(count / 1000000000).toFixed(2)}B`;
+          if (count >= 1000000) return `${(count / 1000000).toFixed(2)}M`;
+          if (count >= 1000) return `${(count / 1000).toFixed(2)}K`;
+          return this.formatInteger(count);
         },
 
         formatInteger(value) {
