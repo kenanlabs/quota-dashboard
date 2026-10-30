@@ -10,3 +10,4 @@ db/*.db-journal
 data/
 .DS_Store
 cc-switch/
+*.tsbuildinfo

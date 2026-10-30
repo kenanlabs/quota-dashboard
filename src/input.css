@@ -47,6 +47,9 @@
 
 [x-cloak] { display: none !important; }
     :root {
+      --q-font-jinkai: '仓耳今楷', 'TsangerJinKai', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      --q-font-system: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      --q-font-family: var(--q-font-jinkai);
       --q-canvas: #f5f1e8;
       --q-surface: #ffffff;
       --q-surface-muted: #faf7f1;
@@ -319,16 +322,51 @@
     }
 
     body {
-      font-family: '仓耳今楷', 'TsangerJinKai', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      font-family: var(--q-font-family);
       font-feature-settings: "cv02", "cv03", "cv04", "cv11";
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
 
     /* --- 字体偏好与粗细档位调节 (Font Family & Weight Controls) --- */
+    body[data-font-family="system"] {
+      --q-font-family: var(--q-font-system);
+    }
+
     body[data-font-family="system"],
     body[data-font-family="system"] *:not(.num-tabular):not(code):not(pre):not([class*="font-mono"]) {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif !important;
+      font-family: var(--q-font-system) !important;
+    }
+
+    /* 所有输入框及文本域的占位提示文字 (Placeholder)，统一遵循当前所选字体，即使输入框带有 font-mono 也保持优美的界面字体 */
+    input::placeholder,
+    textarea::placeholder,
+    input::-webkit-input-placeholder,
+    textarea::-webkit-input-placeholder,
+    input::-moz-placeholder,
+    textarea::-moz-placeholder {
+      font-family: var(--q-font-family) !important;
+      letter-spacing: normal;
+    }
+
+    body[data-font-family="system"] input::placeholder,
+    body[data-font-family="system"] textarea::placeholder,
+    body[data-font-family="system"] input::-webkit-input-placeholder,
+    body[data-font-family="system"] textarea::-webkit-input-placeholder,
+    body[data-font-family="system"] input::-moz-placeholder,
+    body[data-font-family="system"] textarea::-moz-placeholder {
+      font-family: var(--q-font-system) !important;
+    }
+
+    /* 当等宽输入框处于空值占位状态 (显示提示文字) 时，输入框自身字体也同步匹配页面字体 */
+    input.font-mono:placeholder-shown,
+    textarea.font-mono:placeholder-shown {
+      font-family: var(--q-font-family) !important;
+    }
+
+    body[data-font-family="system"] input.font-mono:placeholder-shown,
+    body[data-font-family="system"] textarea.font-mono:placeholder-shown {
+      font-family: var(--q-font-system) !important;
     }
 
     /* 粗细三档微调：解决默认文字在部分屏幕上偏细的问题 */

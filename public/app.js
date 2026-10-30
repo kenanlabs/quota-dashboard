@@ -127,7 +127,7 @@ function dashboardApp() {
         fontWeight: 'medium',
         fontFamilyList: [
           { id: 'jinkai', name: '仓耳今楷', desc: '典雅楷书 · 文化雅韵' },
-          { id: 'system', name: '系统默认黑体', desc: '现代极简 · 无衬线' }
+          { id: 'system', name: '系统默认', desc: '清晰规范 · 随系统默认' }
         ],
         fontWeightList: [
           { id: 'normal', name: '纤细常规', desc: '原始纤秀笔画 (400)' },
