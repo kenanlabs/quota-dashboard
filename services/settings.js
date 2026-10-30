@@ -36,6 +36,7 @@ const DEFAULT_VISIBLE_FIELDS = Object.freeze({
   usage_5h: true,
   usage_7d: true,
   usage_monthly: true,
+  today_tokens: true,
   reset_time: true,
   last_updated: true
 });

@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preload" href="/fonts/TsangerJinKai03-W03.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/TsangerJinKai03-W04.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/tailwind.css?v=20261028q">
+  <link rel="stylesheet" href="/tailwind.css?v=20261030a">
   <script defer src="/vendor/alpine.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen antialiased" x-data="dashboardApp()" x-init="init()" :data-appearance="resolvedAppearance" :data-theme-palette="themePalette" :data-font-family="fontFamily" :data-font-weight="fontWeight">
@@ -375,9 +375,55 @@
 
     <!-- 过滤器与统计概览 -->
     <div class="flex flex-col justify-between gap-4 mb-6 lg:flex-row lg:items-center">
-      <div class="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300">
-        <span>账号：共 <strong class="text-slate-900 dark:text-white num-tabular font-bold" x-text="totalKeys || filteredKeys.length">0</strong> 个账号</span>
-        <span x-show="loading && keys.length > 0" class="inline-flex items-center text-xs text-teal-600 dark:text-teal-400 gap-1.5 font-medium ml-2 animate-pulse">
+      <div class="q-summary-bar">
+        <span class="q-summary-account">账号：共 <strong class="text-slate-900 dark:text-white num-tabular font-bold" x-text="totalKeys || filteredKeys.length">0</strong> 个账号</span>
+        <span class="q-summary-divider" aria-hidden="true"></span>
+        <div class="q-display-toggle" role="group" aria-label="用量显示口径">
+          <button
+            type="button"
+            @click="setUsageDisplayMode('used')"
+            :class="usageDisplayMode === 'used' ? 'is-active' : ''"
+            :aria-pressed="usageDisplayMode === 'used'"
+            data-tooltip="显示各配额窗口的已用百分比"
+          >已用</button>
+          <button
+            type="button"
+            @click="setUsageDisplayMode('remaining')"
+            :class="usageDisplayMode === 'remaining' ? 'is-active' : ''"
+            :aria-pressed="usageDisplayMode === 'remaining'"
+            data-tooltip="显示各配额窗口的剩余百分比"
+          >剩余</button>
+        </div>
+        <div
+          class="q-summary-alerts"
+          x-show="usageSummary.quota_exhausted > 0 || usageSummary.balance_insufficient > 0"
+          x-cloak
+        >
+          <span class="q-summary-divider" aria-hidden="true"></span>
+          <span class="q-summary-prefix">其中</span>
+          <span class="q-risk-pill" x-show="usageSummary.quota_exhausted > 0">
+            <strong class="num-tabular" x-text="usageSummary.quota_exhausted"></strong> 个账号用量到期
+          </span>
+          <span class="q-risk-pill" x-show="usageSummary.balance_insufficient > 0">
+            <strong class="num-tabular" x-text="usageSummary.balance_insufficient"></strong> 个账号余额不足
+          </span>
+        </div>
+        <span
+          class="q-summary-divider"
+          x-show="usageSummary.today_tokens != null"
+          x-cloak
+          aria-hidden="true"
+        ></span>
+        <span
+          class="q-token-total"
+          x-show="usageSummary.today_tokens != null"
+          x-cloak
+          data-tooltip="基于 Sub2API 今日统计，按账号去重汇总"
+        >
+          <span class="q-token-total-label">今日 Token 总消耗</span>
+          <strong class="q-token-total-value num-tabular" x-text="formatTokenMillions(usageSummary.today_tokens)"></strong>
+        </span>
+        <span x-show="loading && keys.length > 0" class="inline-flex items-center text-xs text-teal-600 dark:text-teal-400 gap-1.5 font-medium ml-1 animate-pulse">
           <svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
           正在同步用量...
         </span>
@@ -430,7 +476,9 @@
             :class="{
               'dragging': draggedIndex === index,
               'drag-over': dragOverIndex === index && draggedIndex !== index,
-              'disabled': isAdmin && item.enabled === 0
+              'disabled': isAdmin && item.enabled === 0,
+              'q-risk': hasAccountRisk(item),
+              'q-risk-balance': normalizeAccountRisk(item).balance_insufficient
             }"
             :draggable="isAdmin && sortBy === 'default' && !searchQuery.trim()"
             @dragstart="handleDragStart($event, index)"
@@ -460,6 +508,20 @@
                     <template x-for="g in splitGroups(item.sub2api_groups)" :key="g">
                       <span class="q-tag teal" :data-tooltip="'Sub2API 绑定分组: ' + g" x-text="g"></span>
                     </template>
+                  </template>
+
+                  <!-- 配额耗尽与余额不足醒目提示 -->
+                  <template x-for="windowKey in normalizeAccountRisk(item).quota_windows" :key="'risk-' + windowKey">
+                    <span class="q-tag rose q-risk-tag" :data-tooltip="'该账号的' + riskWindowLabel(windowKey) + '配额已耗尽'">
+                      <span class="q-risk-dot"></span>
+                      <span x-text="riskWindowLabel(windowKey) + '用量到期'"></span>
+                    </span>
+                  </template>
+                  <template x-if="normalizeAccountRisk(item).balance_insufficient">
+                    <span class="q-tag rose q-risk-tag" data-tooltip="该账号余额已耗尽，请及时充值">
+                      <span class="q-risk-dot"></span>
+                      余额不足
+                    </span>
                   </template>
 
                   <!-- Sub2API 账号状态标签 -->
@@ -527,41 +589,33 @@
               </div>
             </div>
 
-            <!-- 中间：三段式配额用量指标 -->
+            <!-- 中间：固定四列配额用量指标 -->
             <div class="q-rail-metrics">
               <!-- 5小时限额窗口 -->
-              <div class="q-metric" x-show="usageWindowVisible(item) && settings.visible_fields?.usage_5h !== false && item.usage?.usage_5h !== null && item.usage?.usage_5h !== undefined">
+              <div class="q-metric q-slot-1" x-show="usageWindowVisible(item) && settings.visible_fields?.usage_5h !== false && item.usage?.usage_5h !== null && item.usage?.usage_5h !== undefined">
                 <div class="q-metric-top">
-                  <span class="q-label">5小时窗口</span>
-                  <span class="q-value" :class="getUsageTone(item.usage?.usage_5h)" x-text="formatPercent(item.usage?.usage_5h)"></span>
+                  <span class="q-label" x-text="usageWindowLabel('5小时')"></span>
+                  <span class="q-value" :class="getUsageTone(item.usage?.usage_5h)" x-text="formatPercent(usageDisplayValue(item.usage?.usage_5h))"></span>
                 </div>
                 <div class="q-meter" :class="getUsageTone(item.usage?.usage_5h)">
-                  <span :style="'width:' + Math.min(100, Math.max(0, item.usage?.usage_5h || 0)) + '%'"></span>
+                  <span :style="'width:' + usageMeterValue(item.usage?.usage_5h) + '%'"></span>
                 </div>
                 <div class="q-foot" x-show="settings.visible_fields?.reset_time !== false && item.usage?.reset_5h" x-text="formatResetTime(item.usage?.reset_5h)"></div>
               </div>
 
               <!-- 7天限额窗口 -->
-              <div class="q-metric" x-show="usageWindowVisible(item) && settings.visible_fields?.usage_7d !== false && item.usage?.usage_7d !== null && item.usage?.usage_7d !== undefined">
+              <div class="q-metric q-slot-2" x-show="usageWindowVisible(item) && settings.visible_fields?.usage_7d !== false && item.usage?.usage_7d !== null && item.usage?.usage_7d !== undefined">
                 <div class="q-metric-top">
-                  <span class="q-label">7天窗口</span>
-                  <span class="q-value" :class="getUsageTone(item.usage?.usage_7d)" x-text="formatPercent(item.usage?.usage_7d)"></span>
+                  <span class="q-label" x-text="usageWindowLabel('7天')"></span>
+                  <span class="q-value" :class="getUsageTone(item.usage?.usage_7d)" x-text="formatPercent(usageDisplayValue(item.usage?.usage_7d))"></span>
                 </div>
                 <div class="q-meter" :class="getUsageTone(item.usage?.usage_7d)">
-                  <span :style="'width:' + Math.min(100, Math.max(0, item.usage?.usage_7d || 0)) + '%'"></span>
+                  <span :style="'width:' + usageMeterValue(item.usage?.usage_7d) + '%'"></span>
                 </div>
                 <div class="q-foot" x-show="settings.visible_fields?.reset_time !== false && item.usage?.reset_7d" x-text="formatResetTime(item.usage?.reset_7d)"></div>
               </div>
-              <div class="q-metric" x-show="usageWindowVisible(item) && !(settings.visible_fields?.usage_7d !== false && item.usage?.usage_7d !== null && item.usage?.usage_7d !== undefined)">
-                <div class="q-metric-top">
-                  <span class="q-label">7天窗口</span>
-                  <span class="q-value muted">—</span>
-                </div>
-                <div class="q-foot">该供应商未提供周限额</div>
-              </div>
-
-              <!-- 账户余额 (不换行) 或 月度限额 -->
-              <div class="q-metric" x-show="isBalanceProvider(item.provider) && item.usage?.balance_remaining != null">
+              <!-- 余额型账号：账户余额固定使用 5 小时列 -->
+              <div class="q-metric q-slot-1" x-show="isBalanceProvider(item.provider) && item.usage?.balance_remaining != null">
                 <div class="q-metric-top">
                   <span class="q-label">账户余额</span>
                   <span class="q-value whitespace-nowrap inline-flex items-baseline gap-1" :class="getBalanceTone(item.usage?.balance_remaining)">
@@ -572,13 +626,14 @@
                 <div class="q-foot whitespace-nowrap" x-text="item.usage?.balance_used != null ? ('已消耗 ' + (item.usage?.balance_used ?? 0).toFixed(2) + ' ' + formatCurrencyUnit(item.usage?.balance_unit)) : '余额型计量账号'"></div>
               </div>
 
-              <div class="q-metric" x-show="!isBalanceProvider(item.provider) && settings.visible_fields?.usage_monthly !== false && item.usage?.usage_monthly !== null && item.usage?.usage_monthly !== undefined">
+              <!-- 配额型账号：30 天窗口固定使用第 3 列 -->
+              <div class="q-metric q-slot-3" x-show="!isBalanceProvider(item.provider) && settings.visible_fields?.usage_monthly !== false && item.usage?.usage_monthly !== null && item.usage?.usage_monthly !== undefined">
                 <div class="q-metric-top">
-                  <span class="q-label">月度限额</span>
-                  <span class="q-value" :class="getUsageTone(item.usage?.usage_monthly)" x-text="formatPercent(item.usage?.usage_monthly)"></span>
+                  <span class="q-label" x-text="usageWindowLabel('30天')"></span>
+                  <span class="q-value" :class="getUsageTone(item.usage?.usage_monthly)" x-text="formatPercent(usageDisplayValue(item.usage?.usage_monthly))"></span>
                 </div>
                 <div class="q-meter" :class="getUsageTone(item.usage?.usage_monthly)">
-                  <span :style="'width:' + Math.min(100, Math.max(0, item.usage?.usage_monthly || 0)) + '%'"></span>
+                  <span :style="'width:' + usageMeterValue(item.usage?.usage_monthly) + '%'"></span>
                 </div>
                 <div
                   class="q-foot"
@@ -589,7 +644,23 @@
                 <div class="q-foot" x-show="settings.visible_fields?.reset_time === false || !item.usage?.reset_monthly">月度重置限额</div>
               </div>
 
-              <div class="q-metric" x-show="!item.usage">
+              <!-- Sub2API 今日 Token 用量 -->
+              <div
+                class="q-metric q-today-metric q-slot-4"
+                x-show="item.sub2api_linked && settings.visible_fields?.today_tokens !== false"
+                :data-tooltip="item.usage?.today_tokens != null ? ('来自 Sub2API 的今日累计 Token 用量' + (item.usage?.today_stats_at ? '，更新于 ' + formatRelativeTime(item.usage.today_stats_at) : '')) : '今日用量尚未从 Sub2API 同步'"
+              >
+                <div class="q-metric-top">
+                  <span class="q-label">今日 Token</span>
+                  <span class="q-value teal" x-text="item.usage?.today_tokens != null ? formatTokenMillions(item.usage.today_tokens) : '—'"></span>
+                </div>
+                <div
+                  class="q-foot"
+                  x-text="item.usage?.today_requests != null ? (formatInteger(item.usage.today_requests) + ' 次请求') : (item.usage?.today_tokens != null ? '0 次请求' : '等待 Sub2API 同步')"
+                ></div>
+              </div>
+
+              <div class="q-metric q-slot-1" x-show="!item.usage">
                 <div class="q-metric-top">
                   <span class="q-label">配额用量</span>
                   <span class="q-value muted">—</span>
@@ -1221,6 +1292,10 @@
               <label class="flex items-center space-x-2 cursor-pointer select-none">
                 <input type="checkbox" x-model="settingsForm.visible_fields.usage_monthly" class="q-checkbox">
                 <span>月度限额用量</span>
+              </label>
+              <label class="flex items-center space-x-2 cursor-pointer select-none">
+                <input type="checkbox" x-model="settingsForm.visible_fields.today_tokens" class="q-checkbox">
+                <span>今日 Token 用量</span>
               </label>
               <label class="flex items-center space-x-2 cursor-pointer select-none">
                 <input type="checkbox" x-model="settingsForm.visible_fields.reset_time" class="q-checkbox">

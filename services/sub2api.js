@@ -304,6 +304,139 @@ async function fetchSub2apiData(rawUrl, apiKey, options = {}) {
 }
 
 /**
+ * 标准化 Sub2API 账号今日统计的批量响应。
+ * @param {object} payload
+ * @returns {Map<number, {tokens: number, requests: number}>}
+ */
+function parseTodayStatsResponse(payload) {
+  const data = payload && payload.data !== undefined ? payload.data : payload;
+  const rawStats = data && data.stats && typeof data.stats === 'object'
+    ? data.stats
+    : {};
+  const result = new Map();
+
+  for (const [rawId, rawStat] of Object.entries(rawStats)) {
+    const accountId = Number(rawId);
+    if (!Number.isFinite(accountId) || accountId <= 0 || !rawStat || typeof rawStat !== 'object') {
+      continue;
+    }
+    const tokens = Number(rawStat.tokens);
+    const requests = Number(rawStat.requests);
+    result.set(accountId, {
+      tokens: Number.isFinite(tokens) ? Math.max(0, Math.trunc(tokens)) : 0,
+      requests: Number.isFinite(requests) ? Math.max(0, Math.trunc(requests)) : 0
+    });
+  }
+  return result;
+}
+
+/**
+ * 批量查询 Sub2API 账号今日 Token 用量。
+ * @param {string} rawUrl
+ * @param {string} apiKey
+ * @param {number[]} accountIds
+ * @returns {Promise<Map<number, {tokens: number, requests: number}>>}
+ */
+async function fetchTodayStatsBatch(rawUrl, apiKey, accountIds) {
+  const baseUrl = normalizeUrl(rawUrl);
+  if (!baseUrl) throw clientError('Sub2API Base URL 不能为空');
+  if (!apiKey) throw clientError('Sub2API 管理员 API Key 不能为空');
+
+  const ids = Array.from(new Set(
+    (Array.isArray(accountIds) ? accountIds : [])
+      .map(value => Number(value))
+      .filter(value => Number.isFinite(value) && value > 0)
+  ));
+  if (ids.length === 0) return new Map();
+
+  const headers = {
+    ...getAuthHeaders(apiKey),
+    'Content-Type': 'application/json'
+  };
+  const chunkSize = 500;
+  const chunks = [];
+  for (let index = 0; index < ids.length; index += chunkSize) {
+    chunks.push(ids.slice(index, index + chunkSize));
+  }
+
+  const responses = await mapWithConcurrency(chunks, 2, async chunk => {
+    try {
+      return await safePost(
+        `${baseUrl}/api/v1/admin/accounts/today-stats/batch`,
+        { account_ids: chunk },
+        { headers, timeout: 15000 }
+      );
+    } catch (err) {
+      throw clientError(formatSub2apiError(err));
+    }
+  });
+
+  const merged = new Map();
+  for (const response of responses) {
+    for (const [accountId, stats] of parseTodayStatsResponse(response.data)) {
+      merged.set(accountId, stats);
+    }
+  }
+  return merged;
+}
+
+/**
+ * 将 Sub2API 今日统计同步到本地账号记录。
+ * 该同步失败时不应影响账号分组和健康状态同步。
+ */
+async function syncTodayStatsForAccounts(db, accountIds) {
+  const ids = Array.from(new Set(
+    (Array.isArray(accountIds) ? accountIds : [])
+      .map(value => Number(value))
+      .filter(value => Number.isFinite(value) && value > 0)
+  ));
+  if (ids.length === 0) return { updatedCount: 0, total: 0 };
+
+  const { url, key } = getSub2apiAdminCredentials(db);
+  if (!url || !key) return { updatedCount: 0, total: ids.length, skipped: true };
+
+  const statsByAccount = await fetchTodayStatsBatch(url, key, ids);
+  const statsAt = new Date().toISOString();
+  const updateStmt = db.prepare(`
+    UPDATE api_keys
+    SET sub2api_today_tokens = ?,
+        sub2api_today_requests = ?,
+        sub2api_today_stats_at = ?
+    WHERE sub2api_account_id = ?
+  `);
+
+  let updatedCount = 0;
+  const updateTx = db.transaction(() => {
+    for (const accountId of ids) {
+      const stats = statsByAccount.get(accountId);
+      if (!stats) continue;
+      updatedCount += updateStmt.run(
+        stats.tokens,
+        stats.requests,
+        statsAt,
+        accountId
+      ).changes;
+    }
+  });
+  updateTx();
+
+  return {
+    updatedCount,
+    total: ids.length,
+    statsEntries: statsByAccount.size
+  };
+}
+
+async function syncTodayStatsForEnabledKeys(db) {
+  const accountIds = db.prepare(`
+    SELECT DISTINCT sub2api_account_id
+    FROM api_keys
+    WHERE enabled = 1 AND sub2api_account_id IS NOT NULL
+  `).all().map(row => row.sub2api_account_id);
+  return syncTodayStatsForAccounts(db, accountIds);
+}
+
+/**
  * 匹配某个 Key 在 Sub2API 中对应的分组列表
  * @param {object} keyRecord - { id, provider, display_name, api_key, sub2api_account_id }
  * @param {object} sub2apiData - fetchSub2apiData 返回的数据
@@ -1174,6 +1307,12 @@ async function importSub2apiAccountsByIds(rawUrl, apiKey, selections, db) {
 
   tx(uniqueSelections);
 
+  try {
+    await syncTodayStatsForAccounts(db, uniqueSelections.map(item => item.sub2api_account_id));
+  } catch (err) {
+    console.warn('[Sub2API] 导入后同步今日统计失败:', err.message);
+  }
+
   return {
     importedCount,
     updatedCount,
@@ -1189,6 +1328,10 @@ module.exports = {
   matchKeyGroups,
   syncAllKeys,
   syncSingleKey,
+  parseTodayStatsResponse,
+  fetchTodayStatsBatch,
+  syncTodayStatsForAccounts,
+  syncTodayStatsForEnabledKeys,
   fetchSub2apiAccounts,
   importSub2apiAccountsByIds,
   detectProvider,

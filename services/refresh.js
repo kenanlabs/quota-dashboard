@@ -76,6 +76,12 @@ async function refreshEnabledKeys(db, options = {}) {
     }
   }
 
+  try {
+    await withKeyLock('sub2api:today-stats', () => sub2api.syncTodayStatsForEnabledKeys(db));
+  } catch (err) {
+    console.error('[REFRESH] Sub2API today stats synchronization failed:', err.message);
+  }
+
   return results;
 }
 
@@ -116,6 +122,15 @@ async function refreshSingleKey(db, keyId) {
     await sub2api.syncSingleKey(keyId, db);
   } catch (err) {
     console.error('[REFRESH] Sub2API single-key synchronization failed:', err.message);
+  }
+  try {
+    const accountId = db.prepare('SELECT sub2api_account_id FROM api_keys WHERE id = ?')
+      .get(keyId)?.sub2api_account_id;
+    if (accountId) {
+      await sub2api.syncTodayStatsForAccounts(db, [accountId]);
+    }
+  } catch (err) {
+    console.error('[REFRESH] Sub2API single-key today stats synchronization failed:', err.message);
   }
   return { id: key.id, status: 'success' };
 }

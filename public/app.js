@@ -2,6 +2,14 @@ function dashboardApp() {
       return {
         keys: [],
         totalKeys: 0,
+        usageSummary: {
+          total: 0,
+          quota_exhausted: 0,
+          balance_insufficient: 0,
+          today_tokens: null,
+          today_requests: null
+        },
+        usageDisplayMode: 'used',
         hasMoreKeys: false,
         loadingMore: false,
         loading: false,
@@ -74,11 +82,12 @@ function dashboardApp() {
             owner: true,
             member_count: true,
             sub2api_groups: true,
-          sub2api_schedulable: true,
-          sub2api_status: true,
-          usage_5h: true,
+            sub2api_schedulable: true,
+            sub2api_status: true,
+            usage_5h: true,
             usage_7d: true,
             usage_monthly: true,
+            today_tokens: true,
             reset_time: true,
             last_updated: true
           }
@@ -149,6 +158,13 @@ function dashboardApp() {
 
         async init() {
           localStorage.removeItem('adminToken');
+          try {
+            this.usageDisplayMode = localStorage.getItem('quotaUsageDisplayMode') === 'remaining'
+              ? 'remaining'
+              : 'used';
+          } catch (_) {
+            this.usageDisplayMode = 'used';
+          }
           this.fetchIcons();
           this.initializeTheme();
           await Promise.all([
@@ -444,10 +460,18 @@ function dashboardApp() {
                 this.keys = this.groupKeysByProvider(keysJson.data.map(k => ({
                   ...k,
                   usage: usageMap[k.id]?.usage || null,
+                  risk: usageMap[k.id]?.risk || null,
                   control_actions: usageMap[k.id]?.control_actions || [],
                   control_token: usageMap[k.id]?.control_token || null
                 })));
                 this.totalKeys = keysJson.data.length;
+                this.usageSummary = usageJson.summary || {
+                  total: usageJson.total || 0,
+                  quota_exhausted: 0,
+                  balance_insufficient: 0,
+                  today_tokens: null,
+                  today_requests: null
+                };
                 this.hasMoreKeys = false;
               }
             } else {
@@ -457,6 +481,13 @@ function dashboardApp() {
                 this.publicCsrfToken = json.csrfToken || null;
                 this.keys = this.groupKeysByProvider(json.data);
                 this.totalKeys = json.total || json.data.length;
+                this.usageSummary = json.summary || {
+                  total: json.total || json.data.length,
+                  quota_exhausted: 0,
+                  balance_insufficient: 0,
+                  today_tokens: null,
+                  today_requests: null
+                };
                 this.hasMoreKeys = !!json.hasMore;
               }
             }
@@ -482,6 +513,7 @@ function dashboardApp() {
             this.keys = this.groupKeysByProvider(Array.from(merged.values()));
             this.publicCsrfToken = json.csrfToken || this.publicCsrfToken;
             this.totalKeys = json.total || this.keys.length;
+            this.usageSummary = json.summary || this.usageSummary;
             this.hasMoreKeys = !!json.hasMore;
           } catch (err) {
             this.showToast('加载更多异常: ' + err.message, 'error');
@@ -620,6 +652,16 @@ function dashboardApp() {
           }
         },
 
+        setUsageDisplayMode(mode) {
+          if (!['used', 'remaining'].includes(mode) || this.usageDisplayMode === mode) return;
+          this.usageDisplayMode = mode;
+          try {
+            localStorage.setItem('quotaUsageDisplayMode', mode);
+          } catch (_) {
+            // Preference persistence is best-effort.
+          }
+        },
+
         getAccountStatusClass(status) {
           const s = (status || '').toLowerCase();
           if (s === 'active' || s === 'normal') {
@@ -653,8 +695,47 @@ function dashboardApp() {
           return balance != null && balance <= 0 ? 'rose' : 'green';
         },
 
+        usageDisplayValue(usedPercent) {
+          if (usedPercent === null || usedPercent === undefined) return null;
+          const used = Number(usedPercent);
+          if (!Number.isFinite(used)) return null;
+          return this.usageDisplayMode === 'remaining'
+            ? Math.max(0, 100 - used)
+            : Math.max(0, used);
+        },
+
+        usageMeterValue(usedPercent) {
+          const value = this.usageDisplayValue(usedPercent);
+          return value === null ? 0 : Math.min(100, value);
+        },
+
+        usageWindowLabel(label) {
+          return `${label}·${this.usageDisplayMode === 'remaining' ? '剩余' : '已用'}`;
+        },
+
+        normalizeAccountRisk(item) {
+          const risk = item && item.risk;
+          return {
+            quota_windows: Array.isArray(risk && risk.quota_windows) ? risk.quota_windows : [],
+            quota_exhausted: !!(risk && risk.quota_exhausted),
+            balance_insufficient: !!(risk && risk.balance_insufficient)
+          };
+        },
+
+        hasAccountRisk(item) {
+          const risk = this.normalizeAccountRisk(item);
+          return risk.quota_exhausted || risk.balance_insufficient;
+        },
+
+        riskWindowLabel(windowKey) {
+          return ({ '5h': '5小时', '7d': '7天', '30d': '30天' })[windowKey] || windowKey;
+        },
+
         usageWindowVisible(item) {
-          return !!item.usage && !this.balanceVisible(item);
+          if (!item.usage || this.balanceVisible(item)) return false;
+          return item.usage.usage_5h != null ||
+            item.usage.usage_7d != null ||
+            item.usage.usage_monthly != null;
         },
 
         balanceVisible(item) {
@@ -725,6 +806,9 @@ function dashboardApp() {
               }
               if (this.settingsForm.visible_fields.sub2api_status === undefined) {
                 this.settingsForm.visible_fields.sub2api_status = true;
+              }
+              if (this.settingsForm.visible_fields.today_tokens === undefined) {
+                this.settingsForm.visible_fields.today_tokens = true;
               }
               if (this.settingsForm.theme_mode === undefined) this.settingsForm.theme_mode = 'auto';
               if (this.settingsForm.theme_palette === undefined) this.settingsForm.theme_palette = 'teal';
@@ -1413,6 +1497,19 @@ function dashboardApp() {
         formatPercent(val) {
           if (val === null || val === undefined) return '0%';
           return Math.round(val) + '%';
+        },
+
+        formatTokenMillions(tokens) {
+          const value = Number(tokens);
+          if (!Number.isFinite(value)) return '—';
+          const millions = Math.max(0, value) / 1000000;
+          return `${millions.toFixed(millions >= 100 ? 1 : 2)}M`;
+        },
+
+        formatInteger(value) {
+          const number = Number(value);
+          if (!Number.isFinite(number)) return '—';
+          return new Intl.NumberFormat('zh-CN').format(Math.max(0, Math.trunc(number)));
         },
 
         isBalanceProvider(provider) {

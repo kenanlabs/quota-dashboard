@@ -277,12 +277,14 @@ test('security boundaries and public capability flow', async t => {
     INSERT INTO api_keys (
       provider, display_name, api_key, team, owner, enabled,
       sub2api_account_id, sub2api_schedulable, sub2api_status,
+      sub2api_today_tokens, sub2api_today_requests, sub2api_today_stats_at,
       public_schedule_control, public_recover_control, admin_locked, control_version
-    ) VALUES ('deepseek', 'integration-key', ?, 'test', 'test', 1, 99, 1, 'active', 1, 1, 0, 0)
+    ) VALUES ('deepseek', 'integration-key', ?, 'test', 'test', 1, 99, 1, 'active',
+              12345678, 321, CURRENT_TIMESTAMP, 1, 1, 0, 0)
   `).run(encryptSecret('integration-secret')).lastInsertRowid);
   db.prepare(`
-    INSERT INTO usage_snapshots (api_key_id, usage_5h, reset_5h, queried_at)
-    VALUES (?, 25, '2026-10-28T12:00:00Z', CURRENT_TIMESTAMP)
+    INSERT INTO usage_snapshots (api_key_id, usage_5h, reset_5h, balance_remaining, queried_at)
+    VALUES (?, 100, '2026-10-28T12:00:00Z', -1, CURRENT_TIMESTAMP)
   `).run(keyId);
   const disabledKeyId = Number(db.prepare(`
     INSERT INTO api_keys (
@@ -333,6 +335,20 @@ test('security boundaries and public capability flow', async t => {
   assert.equal(usage.body.data.length, 1);
   assert.equal(usage.body.data[0].owner, '');
   assert.equal(usage.body.data[0].usage.reset_5h, '2026-10-28T12:00:00.000Z');
+  assert.equal(usage.body.data[0].usage.today_tokens, 12345678);
+  assert.equal(usage.body.data[0].usage.today_requests, 321);
+  assert.deepEqual(usage.body.summary, {
+    total: 1,
+    quota_exhausted: 1,
+    balance_insufficient: 1,
+    today_tokens: 12345678,
+    today_requests: 321
+  });
+  assert.deepEqual(usage.body.data[0].risk, {
+    quota_windows: ['5h'],
+    quota_exhausted: true,
+    balance_insufficient: true
+  });
   assert.deepEqual(usage.body.data[0].control_actions, ['schedule']);
   const publicCookies = cookiesFrom(usage.response);
   const publicCsrf = usage.body.csrfToken;

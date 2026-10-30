@@ -20,6 +20,7 @@ const { withKeyLock } = require('../services/keyedLock');
 const { writeAudit } = require('../services/audit');
 const { errorResponse, badRequest } = require('../services/httpErrors');
 const { apiReadLimiter, publicControlLimiter } = require('../middleware/rateLimits');
+const { assessAccountRisk, summarizeAccountRisks } = require('../services/accountRisk');
 const {
   publicScheduleSchema,
   publicRecoverSchema
@@ -67,6 +68,11 @@ function projectUsage(snapshot, fields) {
   usage.balance_used = snapshot.balance_used;
   usage.balance_total = snapshot.balance_total;
   usage.balance_unit = snapshot.balance_unit;
+  if (fields.today_tokens !== false && snapshot.sub2api_today_tokens !== undefined) {
+    usage.today_tokens = snapshot.sub2api_today_tokens;
+    usage.today_requests = snapshot.sub2api_today_requests;
+    usage.today_stats_at = normalizeDate(snapshot.sub2api_today_stats_at);
+  }
   if (fields.last_updated !== false) usage.queried_at = normalizeDate(snapshot.queried_at);
   return usage;
 }
@@ -179,6 +185,7 @@ router.get('/usage', apiReadLimiter, (req, res) => {
       SELECT k.id, k.provider, k.display_name, k.team, k.owner, k.member_count,
              k.sort_order, k.enabled, k.sub2api_groups, k.sub2api_account_id,
              k.sub2api_schedulable, k.sub2api_status, k.sub2api_error_message,
+             k.sub2api_today_tokens, k.sub2api_today_requests, k.sub2api_today_stats_at,
              k.public_schedule_control, k.public_recover_control,
              k.admin_locked, k.control_version,
              s.usage_5h, s.reset_5h, s.usage_7d, s.reset_7d,
@@ -207,9 +214,15 @@ router.get('/usage', apiReadLimiter, (req, res) => {
         balance_used: key.balance_used,
         balance_total: key.balance_total,
         balance_unit: key.balance_unit,
+        sub2api_today_tokens: key.sub2api_today_tokens,
+        sub2api_today_requests: key.sub2api_today_requests,
+        sub2api_today_stats_at: key.sub2api_today_stats_at,
         queried_at: key.queried_at
       };
       const actions = publicControlActions(key, fields, controlConfigured);
+      const risk = assessAccountRisk(snapshot, fields, {
+        errorMessage: key.sub2api_error_message
+      });
       return {
         id: key.id,
         provider: key.provider,
@@ -230,15 +243,53 @@ router.get('/usage', apiReadLimiter, (req, res) => {
         control_token: actions.length
           ? signControlToken(key, actions)
           : null,
-        usage: snapshot.queried_at ? projectUsage(snapshot, fields) : null
+        risk,
+        usage: snapshot.queried_at ||
+          (fields.today_tokens !== false && snapshot.sub2api_today_tokens !== null)
+          ? projectUsage(snapshot, fields)
+          : null
       };
     });
+
+    const summaryRows = db.prepare(`
+      SELECT k.id, k.sub2api_account_id, k.sub2api_error_message,
+             k.sub2api_today_tokens, k.sub2api_today_requests,
+             s.usage_5h, s.usage_7d, s.usage_monthly,
+             s.balance_remaining
+      FROM api_keys k
+      LEFT JOIN usage_snapshots s ON s.id = (
+        SELECT latest.id FROM usage_snapshots latest
+        WHERE latest.api_key_id = k.id
+        ORDER BY latest.id DESC LIMIT 1
+      )
+      WHERE k.enabled = 1
+    `).all();
+    const summary = summarizeAccountRisks(summaryRows, fields);
+    summary.total = total;
+    const todayByAccount = new Map();
+    for (const row of summaryRows) {
+      if (row.sub2api_today_tokens == null) continue;
+      const identity = row.sub2api_account_id != null
+        ? `account:${row.sub2api_account_id}`
+        : `key:${row.id}`;
+      todayByAccount.set(identity, {
+        tokens: Number(row.sub2api_today_tokens) || 0,
+        requests: Number(row.sub2api_today_requests) || 0
+      });
+    }
+    summary.today_tokens = fields.today_tokens !== false && todayByAccount.size > 0
+      ? Array.from(todayByAccount.values()).reduce((sum, item) => sum + item.tokens, 0)
+      : null;
+    summary.today_requests = fields.today_tokens !== false && todayByAccount.size > 0
+      ? Array.from(todayByAccount.values()).reduce((sum, item) => sum + item.requests, 0)
+      : null;
 
     return res.json({
       success: true,
       data: result,
       csrfToken: session.csrfToken,
       total,
+      summary,
       hasMore: offset + result.length < total
     });
   } catch (err) {
