@@ -49,6 +49,25 @@ function normalizeDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function parseTopUsers(raw) {
+  if (!raw) return [];
+  try {
+    const list = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter(item => item && typeof item === 'object' && Number(item.user_id) > 0)
+      .slice(0, 3)
+      .map(item => ({
+        user_id: Number(item.user_id),
+        username: String(item.username || `用户 #${item.user_id}`).trim().slice(0, 160),
+        tokens: Math.max(0, Math.trunc(Number(item.tokens) || 0)),
+        requests: Math.max(0, Math.trunc(Number(item.requests) || 0))
+      }));
+  } catch (_) {
+    return [];
+  }
+}
+
 function projectUsage(snapshot, fields) {
   if (!snapshot) return null;
   const usage = {};
@@ -186,6 +205,7 @@ router.get('/usage', apiReadLimiter, (req, res) => {
              k.sort_order, k.enabled, k.sub2api_groups, k.sub2api_account_id,
              k.sub2api_schedulable, k.sub2api_status, k.sub2api_error_message,
              k.sub2api_today_tokens, k.sub2api_today_requests, k.sub2api_today_stats_at,
+             k.sub2api_top_users,
              k.public_schedule_control, k.public_recover_control,
              k.admin_locked, k.control_version,
              s.usage_5h, s.reset_5h, s.usage_7d, s.reset_7d,
@@ -237,6 +257,7 @@ router.get('/usage', apiReadLimiter, (req, res) => {
         sub2api_schedulable: fields.sub2api_schedulable === false ? null : key.sub2api_schedulable,
         sub2api_status: fields.sub2api_status === false ? null : key.sub2api_status,
         sub2api_error_message: '',
+        sub2api_top_users: fields.sub2api_top_users === false ? [] : parseTopUsers(key.sub2api_top_users),
         public_schedule_control: fields.sub2api_schedulable !== false && !!key.public_schedule_control,
         public_recover_control: fields.sub2api_status !== false && !!key.public_recover_control,
         control_actions: actions,

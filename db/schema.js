@@ -67,6 +67,7 @@ function initDb() {
       sub2api_today_tokens INTEGER,
       sub2api_today_requests INTEGER,
       sub2api_today_stats_at DATETIME,
+      sub2api_top_users TEXT,
       public_schedule_control INTEGER NOT NULL DEFAULT 0,
       public_recover_control INTEGER NOT NULL DEFAULT 0,
       admin_locked INTEGER NOT NULL DEFAULT 0,
@@ -196,6 +197,12 @@ function initDb() {
   }
 
   try {
+    db.exec('ALTER TABLE api_keys ADD COLUMN sub2api_top_users TEXT');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
     db.exec('ALTER TABLE api_keys ADD COLUMN public_schedule_control INTEGER NOT NULL DEFAULT 0');
   } catch (e) {
     // Column already exists, ignore
@@ -247,6 +254,7 @@ function initDb() {
       usage_7d: true,
       usage_monthly: true,
       today_tokens: true,
+      sub2api_top_users: true,
       reset_time: true,
       last_updated: true
     })

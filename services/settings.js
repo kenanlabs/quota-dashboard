@@ -37,6 +37,7 @@ const DEFAULT_VISIBLE_FIELDS = Object.freeze({
   usage_7d: true,
   usage_monthly: true,
   today_tokens: true,
+  sub2api_top_users: true,
   reset_time: true,
   last_updated: true
 });

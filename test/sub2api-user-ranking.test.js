@@ -2,6 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   parseUserRanking,
+  parseEarliestUsageDate,
+  parseEarliestTrendDate,
+  aggregateAccountTopUsers,
   resolveUserRankingDateRange
 } = require('../services/sub2api');
 
@@ -115,4 +118,56 @@ test('Sub2API user ranking supports day, week, month, and all granularities with
     () => resolveUserRankingDateRange('quarter', '2025-05-01'),
     err => err.statusCode === 400
   );
+});
+
+test('Sub2API earliest usage date converts UTC timestamp to Shanghai calendar date', () => {
+  // 2026-08-14T20:30:00Z is 2026-08-15 04:30:00 in Asia/Shanghai
+  assert.equal(
+    parseEarliestUsageDate({ code: 0, data: { items: [{ created_at: '2026-08-14T20:30:00Z' }] } }),
+    '2026-08-15'
+  );
+  assert.equal(parseEarliestUsageDate({ code: 0, data: { items: [] } }), null);
+  assert.equal(parseEarliestUsageDate(null), null);
+});
+
+test('Sub2API earliest trend date skips zero-usage days and picks earliest active date', () => {
+  assert.equal(
+    parseEarliestTrendDate({
+      code: 0,
+      data: {
+        trend: [
+          { date: '2026-08-10', requests: 0, total_tokens: 0 },
+          { date: '2026-08-18', requests: 12, total_tokens: 4500 },
+          { date: '2026-08-15', requests: 3, total_tokens: 900 }
+        ]
+      }
+    }),
+    '2026-08-15'
+  );
+  assert.equal(parseEarliestTrendDate({ data: { trend: [] } }), null);
+});
+
+test('Sub2API account top users aggregates and returns top 3 without email or cost', () => {
+  const top = aggregateAccountTopUsers({
+    code: 0,
+    data: {
+      items: [
+        { user_id: 1, user: { username: 'Alice', email: 'a@example.com' }, input_tokens: 100, output_tokens: 50, cache_read_tokens: 50, total_tokens: 200, cost: 1.5 },
+        { user_id: 2, user: { username: 'Bob', email: 'b@example.com' }, total_tokens: 900, actual_cost: 2.0 },
+        { user_id: 1, user: { username: 'Alice' }, total_tokens: 300 },
+        { user_id: 3, user: { username: 'Charlie' }, total_tokens: 400 },
+        { user_id: 4, user: { username: 'Diana' }, total_tokens: 150 },
+        { user_id: 0, total_tokens: 99999 }
+      ]
+    }
+  }, 3);
+
+  assert.equal(top.length, 3);
+  assert.deepEqual(top, [
+    { user_id: 2, username: 'Bob', tokens: 900, requests: 1 },
+    { user_id: 1, username: 'Alice', tokens: 500, requests: 2 },
+    { user_id: 3, username: 'Charlie', tokens: 400, requests: 1 }
+  ]);
+  assert.equal(Object.prototype.hasOwnProperty.call(top[0], 'email'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(top[0], 'cost'), false);
 });

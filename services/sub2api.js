@@ -420,11 +420,124 @@ async function syncTodayStatsForAccounts(db, accountIds) {
   });
   updateTx();
 
+  try {
+    await syncTopUsersForAccounts(db, ids, { url, key });
+  } catch (err) {
+    console.warn('[Sub2API] 同步账号常用用户失败:', err.message);
+  }
+
   return {
     updatedCount,
     total: ids.length,
     statsEntries: statsByAccount.size
   };
+}
+
+function aggregateAccountTopUsers(payload, limit = 3) {
+  const data = payload && payload.data !== undefined ? payload.data : payload;
+  const items = Array.isArray(data)
+    ? data
+    : (data && Array.isArray(data.items) ? data.items : []);
+  const byUser = new Map();
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const userId = Number(item.user_id || (item.user && item.user.id)) || 0;
+    if (userId <= 0) continue;
+
+    const input = normalizeTokenCount(item.input_tokens);
+    const output = normalizeTokenCount(item.output_tokens);
+    const cache = normalizeTokenCount(item.cache_tokens) ||
+      (normalizeTokenCount(item.cache_creation_tokens) + normalizeTokenCount(item.cache_read_tokens));
+    const tokens = normalizeTokenCount(item.total_tokens) || (input + output + cache);
+    const username = String(
+      (item.user && item.user.username) || item.username || ''
+    ).trim().slice(0, 160);
+
+    const existing = byUser.get(userId);
+    if (existing) {
+      existing.tokens += tokens;
+      existing.requests += 1;
+      if (!existing.username && username) existing.username = username;
+    } else {
+      byUser.set(userId, {
+        user_id: userId,
+        username,
+        tokens,
+        requests: 1
+      });
+    }
+  }
+
+  return Array.from(byUser.values())
+    .sort((a, b) => (b.tokens - a.tokens) || (b.requests - a.requests) || (a.user_id - b.user_id))
+    .slice(0, Math.max(1, limit));
+}
+
+async function fetchTopUsersForAccount(baseUrl, apiKey, accountId) {
+  try {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/usage`, {
+      params: {
+        account_id: accountId,
+        page: 1,
+        page_size: 100,
+        sort_by: 'created_at',
+        sort_order: 'desc',
+        exact_total: false
+      },
+      headers: getAuthHeaders(apiKey),
+      timeout: 10000
+    });
+    const top = aggregateAccountTopUsers(res.data, 3);
+    if (top.length === 0) return [];
+    return await mapWithConcurrency(top, 3, async entry => {
+      if (entry.username) return entry;
+      const identity = await fetchAdminUserIdentity(baseUrl, apiKey, entry.user_id);
+      return {
+        user_id: entry.user_id,
+        username: identity.username || `用户 #${entry.user_id}`,
+        tokens: entry.tokens,
+        requests: entry.requests
+      };
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
+async function syncTopUsersForAccounts(db, accountIds, credentials = null) {
+  const ids = Array.from(new Set(
+    (Array.isArray(accountIds) ? accountIds : [])
+      .map(value => Number(value))
+      .filter(value => Number.isFinite(value) && value > 0)
+  ));
+  if (ids.length === 0) return { updatedCount: 0, total: 0 };
+
+  const creds = credentials || getSub2apiAdminCredentials(db);
+  if (!creds.url || !creds.key) return { updatedCount: 0, total: ids.length, skipped: true };
+  const baseUrl = normalizeUrl(creds.url);
+
+  const results = await mapWithConcurrency(ids, 3, async accountId => ({
+    accountId,
+    topUsers: await fetchTopUsersForAccount(baseUrl, creds.key, accountId)
+  }));
+
+  const updateStmt = db.prepare(`
+    UPDATE api_keys
+    SET sub2api_top_users = ?
+    WHERE sub2api_account_id = ?
+  `);
+
+  let updatedCount = 0;
+  const tx = db.transaction(() => {
+    for (const { accountId, topUsers } of results) {
+      if (!Array.isArray(topUsers)) continue;
+      updatedCount += updateStmt.run(JSON.stringify(topUsers), accountId).changes;
+    }
+  });
+  tx();
+
+  return { updatedCount, total: ids.length };
 }
 
 async function syncTodayStatsForEnabledKeys(db) {
@@ -445,13 +558,15 @@ const USER_RANKING_ALL_START_DATE = '2020-01-01';
 const userIdentityCache = new Map();
 const userRankingCache = new Map();
 
-function shanghaiDate(offsetDays = 0) {
+function shanghaiDate(offsetDays = 0, referenceInput = null) {
+  const ref = referenceInput ? new Date(referenceInput) : new Date();
+  if (Number.isNaN(ref.getTime())) return null;
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit'
-  }).formatToParts(new Date());
+  }).formatToParts(ref);
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   const date = new Date(Date.UTC(
     Number(values.year),
@@ -628,6 +743,71 @@ function parseUserRanking(payload) {
   }).filter(item => item.user_id > 0);
 }
 
+function parseEarliestUsageDate(payload) {
+  const data = payload && payload.data !== undefined ? payload.data : payload;
+  const items = Array.isArray(data)
+    ? data
+    : (data && Array.isArray(data.items) ? data.items : []);
+  const first = items[0];
+  const rawTimestamp = first && (first.created_at || first.createdAt || first.timestamp);
+  if (!rawTimestamp) return null;
+  return shanghaiDate(0, rawTimestamp);
+}
+
+function parseEarliestTrendDate(payload) {
+  const data = payload && payload.data !== undefined ? payload.data : payload;
+  const trend = data && Array.isArray(data.trend) ? data.trend : (Array.isArray(data) ? data : []);
+  let earliest = null;
+  for (const item of trend) {
+    if (!item || typeof item !== 'object' || !item.date) continue;
+    const dateStr = String(item.date).slice(0, 10);
+    if (!parseIsoDate(dateStr)) continue;
+    const activity = normalizeTokenCount(item.requests) +
+      normalizeTokenCount(item.total_tokens) +
+      normalizeTokenCount(item.tokens) +
+      normalizeTokenCount(item.input_tokens) +
+      normalizeTokenCount(item.output_tokens);
+    if (activity <= 0) continue;
+    if (!earliest || dateStr < earliest) earliest = dateStr;
+  }
+  return earliest;
+}
+
+async function fetchSub2apiEarliestUsageDate(baseUrl, apiKey, endDate = null) {
+  try {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/usage`, {
+      params: {
+        page: 1,
+        page_size: 1,
+        sort_by: 'created_at',
+        sort_order: 'asc',
+        exact_total: false
+      },
+      headers: getAuthHeaders(apiKey),
+      timeout: 10000
+    });
+    const fromUsage = parseEarliestUsageDate(res.data);
+    if (fromUsage) return fromUsage;
+  } catch (_) {
+    // Fall back to dashboard trend endpoint when usage list is unavailable.
+  }
+
+  try {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/dashboard/trend`, {
+      params: {
+        start_date: USER_RANKING_ALL_START_DATE,
+        end_date: endDate || shanghaiDate(0),
+        granularity: 'day'
+      },
+      headers: getAuthHeaders(apiKey),
+      timeout: 10000
+    });
+    return parseEarliestTrendDate(res.data);
+  } catch (_) {
+    return null;
+  }
+}
+
 async function fetchAdminUserIdentity(baseUrl, apiKey, userId) {
   const cacheKey = `${baseUrl}:${userId}`;
   const cached = userIdentityCache.get(cacheKey);
@@ -680,8 +860,9 @@ async function fetchUserTokenRanking(db, range = 'day', date = null) {
   }
 
   let res;
+  let earliestDate = null;
   try {
-    res = await safeGet(`${baseUrl}/api/v1/admin/dashboard/user-breakdown`, {
+    const breakdownPromise = safeGet(`${baseUrl}/api/v1/admin/dashboard/user-breakdown`, {
       params: {
         start_date: dates.startDate,
         end_date: dates.endDate,
@@ -692,6 +873,14 @@ async function fetchUserTokenRanking(db, range = 'day', date = null) {
       headers: getAuthHeaders(key),
       timeout: 20000
     });
+    if (dates.granularity === 'all') {
+      [res, earliestDate] = await Promise.all([
+        breakdownPromise,
+        fetchSub2apiEarliestUsageDate(baseUrl, key, dates.endDate)
+      ]);
+    } else {
+      res = await breakdownPromise;
+    }
   } catch (err) {
     throw clientError(formatSub2apiError(err));
   }
@@ -715,8 +904,9 @@ async function fetchUserTokenRanking(db, range = 'day', date = null) {
     range: dates.range,
     granularity: dates.granularity,
     anchor_date: dates.anchorDate,
-    start_date: dates.startDate,
+    start_date: earliestDate && earliestDate <= dates.endDate ? earliestDate : dates.startDate,
     end_date: dates.endDate,
+    earliest_date: earliestDate && earliestDate <= dates.endDate ? earliestDate : null,
     prev_date: dates.prevDate,
     next_date: dates.nextDate,
     is_current: dates.isCurrent,
@@ -1640,8 +1830,12 @@ module.exports = {
   fetchTodayStatsBatch,
   syncTodayStatsForAccounts,
   syncTodayStatsForEnabledKeys,
+  aggregateAccountTopUsers,
+  syncTopUsersForAccounts,
   resolveUserRankingDateRange,
   parseUserRanking,
+  parseEarliestUsageDate,
+  parseEarliestTrendDate,
   fetchUserTokenRanking,
   fetchSub2apiAccounts,
   importSub2apiAccountsByIds,

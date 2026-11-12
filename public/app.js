@@ -103,6 +103,7 @@ function dashboardApp() {
             usage_7d: true,
             usage_monthly: true,
             today_tokens: true,
+            sub2api_top_users: true,
             reset_time: true,
             last_updated: true
           }
@@ -160,6 +161,7 @@ function dashboardApp() {
         ],
         resolvedAppearance: 'light',
         themeMedia: null,
+        themeWatcherTimer: null,
         tooltipElement: null,
         tooltipTarget: null,
         tooltipPointer: { x: 0, y: 0 },
@@ -413,10 +415,26 @@ function dashboardApp() {
           this.fontFamily = ['jinkai', 'system'].includes(savedFontFamily) ? savedFontFamily : (this.settings.font_family || 'jinkai');
           const savedFontWeight = localStorage.getItem('quotaFontWeight');
           this.fontWeight = ['normal', 'medium', 'bold'].includes(savedFontWeight) ? savedFontWeight : (this.settings.font_weight || 'medium');
-          this.themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
-          this.themeMedia.addEventListener('change', () => {
+          this.themeMedia = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+          const syncAutoTheme = () => {
             if (this.themeMode === 'auto') this.applyThemeMode();
+          };
+          if (this.themeMedia) {
+            if (typeof this.themeMedia.addEventListener === 'function') {
+              this.themeMedia.addEventListener('change', syncAutoTheme);
+            } else if (typeof this.themeMedia.addListener === 'function') {
+              this.themeMedia.addListener(syncAutoTheme);
+            }
+          }
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) syncAutoTheme();
           });
+          window.addEventListener('focus', syncAutoTheme);
+          window.addEventListener('pageshow', syncAutoTheme);
+          if (this.themeWatcherTimer) clearInterval(this.themeWatcherTimer);
+          this.themeWatcherTimer = setInterval(() => {
+            if (!document.hidden) syncAutoTheme();
+          }, 1500);
           this.applyThemeMode();
         },
 
@@ -453,8 +471,37 @@ function dashboardApp() {
         },
 
         applyThemeMode() {
-          const dark = this.themeMode === 'dark' || (this.themeMode === 'auto' && this.themeMedia?.matches);
-          this.resolvedAppearance = dark ? 'dark' : 'light';
+          const dark = this.themeMode === 'dark' || (this.themeMode === 'auto' && this.isSystemDarkMode());
+          const next = dark ? 'dark' : 'light';
+          if (this.resolvedAppearance !== next) {
+            this.resolvedAppearance = next;
+          }
+          if (document.body && document.body.getAttribute('data-appearance') !== next) {
+            document.body.setAttribute('data-appearance', next);
+          }
+          if (document.documentElement) {
+            if (document.documentElement.getAttribute('data-appearance') !== next) {
+              document.documentElement.setAttribute('data-appearance', next);
+            }
+            if (document.documentElement.style.colorScheme !== next) {
+              document.documentElement.style.colorScheme = next;
+            }
+          }
+        },
+
+        isSystemDarkMode() {
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return true;
+          }
+          try {
+            const cssAppearance = getComputedStyle(document.documentElement)
+              .getPropertyValue('--q-system-appearance')
+              .trim();
+            if (cssAppearance === 'dark') return true;
+          } catch (_) {
+            // Ignore style inspection errors in non-DOM contexts.
+          }
+          return false;
         },
 
         async fetchData() {
@@ -476,6 +523,7 @@ function dashboardApp() {
                   ...k,
                   usage: usageMap[k.id]?.usage || null,
                   risk: usageMap[k.id]?.risk || null,
+                  sub2api_top_users: usageMap[k.id]?.sub2api_top_users || [],
                   control_actions: usageMap[k.id]?.control_actions || [],
                   control_token: usageMap[k.id]?.control_token || null
                 })));
@@ -768,6 +816,9 @@ function dashboardApp() {
           const count = this.userRankingMeta.user_count;
           const gran = this.userRankingMeta.granularity || this.userRankingGranularity;
           if (gran === 'all') {
+            if (this.userRankingMeta.earliest_date) {
+              return `统计范围：${this.userRankingMeta.earliest_date} ~ ${this.userRankingMeta.end_date} · ${count} 位用户`;
+            }
             return `统计范围：全部累计（截至 ${this.userRankingMeta.end_date}） · ${count} 位用户`;
           }
           if (this.userRankingMeta.start_date === this.userRankingMeta.end_date) {
@@ -1237,6 +1288,9 @@ function dashboardApp() {
               if (this.settingsForm.visible_fields.today_tokens === undefined) {
                 this.settingsForm.visible_fields.today_tokens = true;
               }
+              if (this.settingsForm.visible_fields.sub2api_top_users === undefined) {
+                this.settingsForm.visible_fields.sub2api_top_users = true;
+              }
               if (this.settingsForm.theme_mode === undefined) this.settingsForm.theme_mode = 'auto';
               if (this.settingsForm.theme_palette === undefined) this.settingsForm.theme_palette = 'teal';
               if (this.settingsForm.font_family === undefined) this.settingsForm.font_family = this.fontFamily || 'jinkai';
@@ -1673,8 +1727,7 @@ function dashboardApp() {
             usage_7d: '7天用量 ↓',
             usage_monthly: '月度用量 ↓',
             today_tokens: '今日 Token ↓',
-            today_requests: '请求次数 ↓',
-            balance_remaining: '剩余余额 ↓'
+            today_requests: '请求次数 ↓'
           };
           return labels[this.sortBy] || '默认排序';
         },
