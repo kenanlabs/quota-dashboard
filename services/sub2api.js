@@ -433,15 +433,27 @@ async function syncTodayStatsForAccounts(db, accountIds) {
   };
 }
 
-function aggregateAccountTopUsers(payload, limit = 3) {
+function extractUsageItems(payload) {
   const data = payload && payload.data !== undefined ? payload.data : payload;
-  const items = Array.isArray(data)
+  return Array.isArray(data)
     ? data
     : (data && Array.isArray(data.items) ? data.items : []);
+}
+
+function aggregateAccountTopUsers(payload, limit = 3, options = {}) {
+  const items = extractUsageItems(payload);
+  const targetDate = options && options.date ? String(options.date) : null;
   const byUser = new Map();
 
   for (const item of items) {
     if (!item || typeof item !== 'object') continue;
+    if (targetDate) {
+      const rawTs = item.created_at || item.createdAt || item.timestamp;
+      if (rawTs) {
+        const itemDate = shanghaiDate(0, rawTs);
+        if (itemDate && itemDate !== targetDate) continue;
+      }
+    }
     const userId = Number(item.user_id || (item.user && item.user.id)) || 0;
     if (userId <= 0) continue;
 
@@ -476,19 +488,35 @@ function aggregateAccountTopUsers(payload, limit = 3) {
 
 async function fetchTopUsersForAccount(baseUrl, apiKey, accountId) {
   try {
-    const res = await safeGet(`${baseUrl}/api/v1/admin/usage`, {
-      params: {
-        account_id: accountId,
-        page: 1,
-        page_size: 100,
-        sort_by: 'created_at',
-        sort_order: 'desc',
-        exact_total: false
-      },
-      headers: getAuthHeaders(apiKey),
-      timeout: 10000
-    });
-    const top = aggregateAccountTopUsers(res.data, 3);
+    const today = shanghaiDate(0);
+    const allItems = [];
+    const pageSize = 100;
+    const maxPages = 5;
+
+    for (let page = 1; page <= maxPages; page++) {
+      const res = await safeGet(`${baseUrl}/api/v1/admin/usage`, {
+        params: {
+          account_id: accountId,
+          start_date: today,
+          end_date: today,
+          timezone: 'Asia/Shanghai',
+          page,
+          page_size: pageSize,
+          sort_by: 'created_at',
+          sort_order: 'desc',
+          exact_total: false
+        },
+        headers: getAuthHeaders(apiKey),
+        timeout: 10000
+      });
+      const items = extractUsageItems(res.data);
+      allItems.push(...items);
+      if (items.length < pageSize) break;
+      const lastTs = items[items.length - 1] && (items[items.length - 1].created_at || items[items.length - 1].createdAt);
+      if (lastTs && shanghaiDate(0, lastTs) < today) break;
+    }
+
+    const top = aggregateAccountTopUsers(allItems, 3, { date: today });
     if (top.length === 0) return [];
     return await mapWithConcurrency(top, 3, async entry => {
       if (entry.username) return entry;

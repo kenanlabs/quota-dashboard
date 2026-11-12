@@ -827,6 +827,26 @@ function dashboardApp() {
           return `统计范围：${this.userRankingMeta.start_date} ~ ${this.userRankingMeta.end_date} · ${count} 位用户`;
         },
 
+        get userRankingDateText() {
+          if (!this.userRankingMeta) return '统计来源：Sub2API 用户排行';
+          const gran = this.userRankingMeta.granularity || this.userRankingGranularity;
+          if (gran === 'all') {
+            if (this.userRankingMeta.earliest_date) {
+              return `统计范围：${this.userRankingMeta.earliest_date} ~ ${this.userRankingMeta.end_date}`;
+            }
+            return `统计范围：全部累计（截至 ${this.userRankingMeta.end_date}）`;
+          }
+          if (this.userRankingMeta.start_date === this.userRankingMeta.end_date) {
+            return `统计日期：${this.userRankingMeta.start_date}`;
+          }
+          return `统计范围：${this.userRankingMeta.start_date} ~ ${this.userRankingMeta.end_date}`;
+        },
+
+        get userRankingCountText() {
+          if (!this.userRankingMeta) return '';
+          return `共 ${this.userRankingMeta.user_count} 位用户`;
+        },
+
         get userRankingSortDescription() {
           const labels = {
             total_tokens: '总 Token',

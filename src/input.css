@@ -661,11 +661,13 @@
     }
 
     .q-top-users {
+      grid-column: 1 / -1;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: flex-end;
       gap: 5px;
-      margin-top: 7px;
+      margin-top: 0;
     }
     .q-top-users-label {
       display: inline-flex;
@@ -682,8 +684,8 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      max-width: 120px;
-      padding: 1.5px 7px 1.5px 3px;
+      max-width: 130px;
+      padding: 1px 6px 1px 2.5px;
       border: 1px solid var(--q-line);
       border-radius: 999px;
       background: var(--q-surface-muted);
@@ -741,7 +743,7 @@
     .q-rail-metrics {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 18px;
+      gap: 10px 18px;
       min-width: 500px;
       flex: 2 1 560px;
     }
@@ -1154,6 +1156,10 @@
       }
       .q-rail-metrics .q-metric {
         grid-column: auto;
+      }
+      .q-top-users {
+        grid-column: auto;
+        justify-content: flex-start;
       }
       .q-rail-side {
         width: 100%;

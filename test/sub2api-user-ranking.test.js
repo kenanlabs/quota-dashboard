@@ -171,3 +171,14 @@ test('Sub2API account top users aggregates and returns top 3 without email or co
   assert.equal(Object.prototype.hasOwnProperty.call(top[0], 'email'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(top[0], 'cost'), false);
 });
+
+test('Sub2API account top users filters to target Shanghai calendar day when date option is provided', () => {
+  const top = aggregateAccountTopUsers([
+    { user_id: 1, user: { username: 'Alice' }, total_tokens: 9000, created_at: '2026-11-11T15:59:59Z' }, // 2026-11-11 23:59:59 Shanghai
+    { user_id: 2, user: { username: 'Bob' }, total_tokens: 500, created_at: '2026-11-11T16:00:00Z' }    // 2026-11-12 00:00:00 Shanghai
+  ], 3, { date: '2026-11-12' });
+
+  assert.deepEqual(top, [
+    { user_id: 2, username: 'Bob', tokens: 500, requests: 1 }
+  ]);
+});
