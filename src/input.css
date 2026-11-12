@@ -683,7 +683,8 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      max-width: 82px;
+      max-width: 64px;
+      min-width: 0;
       padding: 1px 6px 1px 2.5px;
       border: 1px solid var(--q-line);
       border-radius: 999px;
@@ -741,9 +742,9 @@
 
     .q-rail-metrics {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(220px, 1.35fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr)) 224px;
       align-items: start;
-      gap: 18px;
+      gap: 14px;
       min-width: 500px;
       flex: 2 1 560px;
     }
@@ -772,6 +773,7 @@
       display: inline-flex;
       flex-direction: column;
       align-items: stretch;
+      width: 224px;
       max-width: 100%;
     }
     .q-today-metric .q-foot {
@@ -1184,6 +1186,9 @@
       }
       .q-today-metric {
         align-items: flex-start;
+      }
+      .q-today-stack {
+        width: 100%;
       }
       .q-today-metric .q-metric-top {
         justify-content: flex-start;
