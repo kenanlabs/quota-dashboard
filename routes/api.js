@@ -19,7 +19,7 @@ const { enforcePublicControlPolicy } = require('../services/controlPolicy');
 const { withKeyLock } = require('../services/keyedLock');
 const { writeAudit } = require('../services/audit');
 const { errorResponse, badRequest } = require('../services/httpErrors');
-const { apiReadLimiter, publicControlLimiter, sub2apiLimiter } = require('../middleware/rateLimits');
+const { apiReadLimiter, publicControlLimiter, userRankingLimiter } = require('../middleware/rateLimits');
 const { assessAccountRisk, summarizeAccountRisks } = require('../services/accountRisk');
 const {
   publicScheduleSchema,
@@ -317,9 +317,11 @@ router.get('/usage/:id/history', apiReadLimiter, (req, res) => {
   }
 });
 
-router.get('/usage/user-ranking', sub2apiLimiter, async (req, res) => {
+router.get('/usage/user-ranking', userRankingLimiter, async (req, res) => {
   try {
-    const ranking = await require('../services/sub2api').fetchUserTokenRanking(db, 'today');
+    const granularity = req.query.granularity || req.query.range || 'day';
+    const date = req.query.date ? String(req.query.date) : null;
+    const ranking = await require('../services/sub2api').fetchUserTokenRanking(db, granularity, date);
     return res.json({
       success: true,
       data: ranking

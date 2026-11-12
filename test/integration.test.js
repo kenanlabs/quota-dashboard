@@ -110,6 +110,10 @@ test('security boundaries and public capability flow', async t => {
   assert.equal(publicRanking.response.status, 401);
   const publicUserRanking = await jsonFetch(`${baseUrl}/api/usage/user-ranking`);
   assert.equal(publicUserRanking.response.status, 503);
+  const invalidGranularityRanking = await jsonFetch(`${baseUrl}/api/usage/user-ranking?granularity=quarter`);
+  assert.equal(invalidGranularityRanking.response.status, 400);
+  const invalidDateRanking = await jsonFetch(`${baseUrl}/api/usage/user-ranking?granularity=day&date=2025-02-30`);
+  assert.equal(invalidDateRanking.response.status, 400);
 
   const forgedToken = jwt.sign(
     { id: 1, username: 'admin', ver: 0 },

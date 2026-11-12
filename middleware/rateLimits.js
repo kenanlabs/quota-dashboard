@@ -56,6 +56,12 @@ const sub2apiLimiter = makeLimiter({
   message: { error: 'Sub2API 操作过于频繁，请稍后重试' }
 });
 
+const userRankingLimiter = makeLimiter({
+  windowMs: 60 * 1000,
+  limit: 60,
+  message: { error: '用量排行查询过于频繁，请稍后重试' }
+});
+
 module.exports = {
   globalApiLimiter,
   apiReadLimiter,
@@ -63,5 +69,6 @@ module.exports = {
   adminMutationLimiter,
   publicControlLimiter,
   refreshLimiter,
-  sub2apiLimiter
+  sub2apiLimiter,
+  userRankingLimiter
 };

@@ -439,6 +439,9 @@ async function syncTodayStatsForEnabledKeys(db) {
 const USER_IDENTITY_CACHE_TTL_MS = 10 * 60 * 1000;
 const USER_IDENTITY_CACHE_LIMIT = 2000;
 const USER_RANKING_CACHE_TTL_MS = 60 * 1000;
+const USER_RANKING_HISTORICAL_CACHE_TTL_MS = 10 * 60 * 1000;
+const USER_RANKING_CACHE_LIMIT = 100;
+const USER_RANKING_ALL_START_DATE = '2020-01-01';
 const userIdentityCache = new Map();
 const userRankingCache = new Map();
 
@@ -458,12 +461,143 @@ function shanghaiDate(offsetDays = 0) {
   return date.toISOString().slice(0, 10);
 }
 
-function resolveUserRankingDateRange(range) {
-  const offset = range === '30d' ? -29 : range === '7d' ? -6 : 0;
+function formatUtcDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseIsoDate(rawDate) {
+  const text = String(rawDate || '').trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() + 1 !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day, date };
+}
+
+function shiftIsoDate(dateStr, offsetDays) {
+  const parsed = parseIsoDate(dateStr);
+  if (!parsed) return null;
+  const shifted = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day + offsetDays));
+  return formatUtcDate(shifted);
+}
+
+function resolveUserRankingDateRange(rangeOrOptions = 'day', dateParam = null) {
+  let rawRange = rangeOrOptions;
+  let rawDate = dateParam;
+  if (rangeOrOptions && typeof rangeOrOptions === 'object') {
+    rawRange = rangeOrOptions.granularity || rangeOrOptions.range || 'day';
+    rawDate = rangeOrOptions.date ?? null;
+  }
+
+  const today = shanghaiDate(0);
+  const normalizedRange = String(rawRange || 'day').trim().toLowerCase();
+
+  if (normalizedRange === '7d' || normalizedRange === '30d') {
+    const offset = normalizedRange === '30d' ? -29 : -6;
+    return {
+      range: normalizedRange,
+      granularity: normalizedRange,
+      anchorDate: today,
+      startDate: shanghaiDate(offset),
+      endDate: today,
+      prevDate: null,
+      nextDate: null,
+      isCurrent: true,
+      today
+    };
+  }
+
+  const granularity = ['day', 'week', 'month', 'all', 'today'].includes(normalizedRange)
+    ? (normalizedRange === 'today' ? 'day' : normalizedRange)
+    : null;
+  if (!granularity) {
+    throw clientError('不支持的时间粒度，仅支持 day / week / month / all', 400);
+  }
+
+  if (granularity === 'all') {
+    return {
+      range: 'all',
+      granularity: 'all',
+      anchorDate: today,
+      startDate: USER_RANKING_ALL_START_DATE,
+      endDate: today,
+      prevDate: null,
+      nextDate: null,
+      isCurrent: true,
+      today
+    };
+  }
+
+  let anchorDate = today;
+  if (rawDate !== null && rawDate !== undefined && String(rawDate).trim() !== '') {
+    let candidate = String(rawDate).trim();
+    if (granularity === 'month' && /^\d{4}-\d{2}$/.test(candidate)) {
+      candidate = `${candidate}-01`;
+    }
+    if (!parseIsoDate(candidate)) {
+      throw clientError('日期格式无效，应为 YYYY-MM-DD', 400);
+    }
+    anchorDate = candidate > today ? today : candidate;
+  }
+
+  if (granularity === 'day') {
+    const isCurrent = anchorDate === today;
+    return {
+      range: normalizedRange === 'today' && !rawDate ? 'today' : 'day',
+      granularity: 'day',
+      anchorDate,
+      startDate: anchorDate,
+      endDate: anchorDate,
+      prevDate: shiftIsoDate(anchorDate, -1),
+      nextDate: !isCurrent ? shiftIsoDate(anchorDate, 1) : null,
+      isCurrent,
+      today
+    };
+  }
+
+  if (granularity === 'week') {
+    const parsed = parseIsoDate(anchorDate);
+    const dayOfWeek = (parsed.date.getUTCDay() + 6) % 7;
+    const weekStart = shiftIsoDate(anchorDate, -dayOfWeek);
+    const weekEndFull = shiftIsoDate(weekStart, 6);
+    const isCurrent = weekEndFull >= today;
+    return {
+      range: 'week',
+      granularity: 'week',
+      anchorDate: weekStart,
+      startDate: weekStart,
+      endDate: weekEndFull > today ? today : weekEndFull,
+      prevDate: shiftIsoDate(weekStart, -7),
+      nextDate: !isCurrent ? shiftIsoDate(weekStart, 7) : null,
+      isCurrent,
+      today
+    };
+  }
+
+  // month
+  const parsed = parseIsoDate(anchorDate);
+  const monthStart = formatUtcDate(new Date(Date.UTC(parsed.year, parsed.month - 1, 1)));
+  const monthEndFull = formatUtcDate(new Date(Date.UTC(parsed.year, parsed.month, 0)));
+  const isCurrent = monthStart.slice(0, 7) === today.slice(0, 7);
   return {
-    range: range === '30d' || range === '7d' ? range : 'today',
-    startDate: shanghaiDate(offset),
-    endDate: shanghaiDate(0)
+    range: 'month',
+    granularity: 'month',
+    anchorDate: monthStart,
+    startDate: monthStart,
+    endDate: monthEndFull > today ? today : monthEndFull,
+    prevDate: formatUtcDate(new Date(Date.UTC(parsed.year, parsed.month - 2, 1))),
+    nextDate: !isCurrent ? formatUtcDate(new Date(Date.UTC(parsed.year, parsed.month, 1))) : null,
+    isCurrent,
+    today
   };
 }
 
@@ -531,15 +665,15 @@ async function fetchAdminUserIdentity(baseUrl, apiKey, userId) {
 /**
  * 获取全站用户 Token 消耗排行（不含费用字段）。
  */
-async function fetchUserTokenRanking(db, range = 'today') {
+async function fetchUserTokenRanking(db, range = 'day', date = null) {
+  const dates = resolveUserRankingDateRange(range, date);
   const { url, key } = getSub2apiAdminCredentials(db);
   if (!url || !key) {
     throw clientError('尚未配置 Sub2API 服务地址或管理员 API Key', 503);
   }
 
   const baseUrl = normalizeUrl(url);
-  const dates = resolveUserRankingDateRange(range);
-  const rankingCacheKey = `${baseUrl}:${dates.range}`;
+  const rankingCacheKey = `${baseUrl}:${dates.granularity}:${dates.startDate}:${dates.endDate}`;
   const cachedRanking = userRankingCache.get(rankingCacheKey);
   if (cachedRanking && cachedRanking.expiresAt > Date.now()) {
     return cachedRanking.value;
@@ -579,14 +713,33 @@ async function fetchUserTokenRanking(db, range = 'today') {
 
   const ranking = {
     range: dates.range,
+    granularity: dates.granularity,
+    anchor_date: dates.anchorDate,
     start_date: dates.startDate,
     end_date: dates.endDate,
+    prev_date: dates.prevDate,
+    next_date: dates.nextDate,
+    is_current: dates.isCurrent,
+    today: dates.today,
     user_count: users.length,
     users
   };
+  if (userRankingCache.size >= USER_RANKING_CACHE_LIMIT) {
+    const now = Date.now();
+    for (const [entryKey, entry] of userRankingCache.entries()) {
+      if (entry.expiresAt <= now) userRankingCache.delete(entryKey);
+    }
+    if (userRankingCache.size >= USER_RANKING_CACHE_LIMIT) {
+      const oldestKey = userRankingCache.keys().next().value;
+      if (oldestKey) userRankingCache.delete(oldestKey);
+    }
+  }
+  const ttl = dates.endDate < dates.today
+    ? USER_RANKING_HISTORICAL_CACHE_TTL_MS
+    : USER_RANKING_CACHE_TTL_MS;
   userRankingCache.set(rankingCacheKey, {
     value: ranking,
-    expiresAt: Date.now() + USER_RANKING_CACHE_TTL_MS
+    expiresAt: Date.now() + ttl
   });
   return ranking;
 }

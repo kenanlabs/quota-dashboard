@@ -826,6 +826,190 @@
     body[data-appearance="dark"] .q-display-toggle button.is-active {
       background: color-mix(in srgb, var(--q-teal) 16%, var(--q-surface));
     }
+    .q-rank-sort-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 3px;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      transition: color var(--q-dur) var(--q-ease);
+    }
+    .q-rank-sort-btn:hover {
+      color: var(--q-ink);
+    }
+    .q-rank-sort-btn.is-active {
+      color: var(--q-teal);
+      font-weight: 700;
+    }
+    .q-datepicker {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 60;
+      width: 268px;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid var(--q-line);
+      background: var(--q-surface);
+      color: var(--q-ink);
+      box-shadow: var(--q-shadow);
+    }
+    .q-datepicker-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .q-datepicker-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--q-ink);
+    }
+    .q-datepicker-nav {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border: 1px solid var(--q-line);
+      border-radius: 7px;
+      background: var(--q-surface-muted);
+      color: var(--q-muted);
+      cursor: pointer;
+      transition: background-color var(--q-dur) var(--q-ease), color var(--q-dur) var(--q-ease);
+    }
+    .q-datepicker-nav:hover:not(:disabled) {
+      color: var(--q-ink);
+      border-color: var(--q-line-strong);
+    }
+    .q-datepicker-nav:disabled {
+      opacity: .32;
+      cursor: not-allowed;
+    }
+    .q-datepicker-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+      margin-bottom: 4px;
+      text-align: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--q-muted);
+    }
+    .q-datepicker-week-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+      padding: 2px;
+      border-radius: 8px;
+      transition: background-color var(--q-dur) var(--q-ease);
+    }
+    .q-datepicker-week-row.is-selectable {
+      cursor: pointer;
+    }
+    .q-datepicker-week-row.is-selectable:hover {
+      background: color-mix(in srgb, var(--q-teal) 10%, transparent);
+    }
+    .q-datepicker-week-row.is-selected {
+      background: color-mix(in srgb, var(--q-teal) 16%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--q-teal) 45%, transparent);
+    }
+    .q-datepicker-week-row.is-disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+    .q-datepicker-day {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 28px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--q-ink);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color var(--q-dur) var(--q-ease), color var(--q-dur) var(--q-ease);
+    }
+    .q-datepicker-day.is-outside {
+      color: var(--q-muted);
+      opacity: .55;
+    }
+    .q-datepicker-day.is-today {
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--q-teal) 55%, transparent);
+      color: var(--q-teal);
+      font-weight: 700;
+    }
+    .q-datepicker-day:hover:not(:disabled):not(.is-selected) {
+      background: color-mix(in srgb, var(--q-teal) 12%, transparent);
+    }
+    .q-datepicker-day.is-selected {
+      background: var(--q-teal);
+      color: var(--q-teal-contrast, #fff);
+      font-weight: 700;
+      box-shadow: none;
+    }
+    .q-datepicker-day:disabled {
+      opacity: .28;
+      cursor: not-allowed;
+    }
+    .q-datepicker-week-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 26px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--q-ink);
+      border-radius: 6px;
+    }
+    .q-datepicker-week-cell.is-outside {
+      color: var(--q-muted);
+      opacity: .55;
+    }
+    .q-datepicker-week-cell.is-today {
+      color: var(--q-teal);
+      font-weight: 700;
+    }
+    .q-datepicker-months {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .q-datepicker-month {
+      height: 34px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: var(--q-surface-muted);
+      color: var(--q-ink);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color var(--q-dur) var(--q-ease), border-color var(--q-dur) var(--q-ease), color var(--q-dur) var(--q-ease);
+    }
+    .q-datepicker-month.is-current:not(.is-selected) {
+      border-color: color-mix(in srgb, var(--q-teal) 50%, transparent);
+      color: var(--q-teal);
+    }
+    .q-datepicker-month:hover:not(:disabled):not(.is-selected) {
+      border-color: var(--q-line-strong);
+      background: color-mix(in srgb, var(--q-teal) 10%, var(--q-surface-muted));
+    }
+    .q-datepicker-month.is-selected {
+      background: var(--q-teal);
+      color: var(--q-teal-contrast, #fff);
+      font-weight: 700;
+    }
+    .q-datepicker-month:disabled {
+      opacity: .3;
+      cursor: not-allowed;
+    }
     .q-risk-pill {
       display: inline-flex;
       align-items: center;

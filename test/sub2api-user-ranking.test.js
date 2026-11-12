@@ -64,3 +64,55 @@ test('Sub2API user ranking date ranges use Shanghai calendar days', () => {
     29
   );
 });
+
+test('Sub2API user ranking supports day, week, month, and all granularities with arbitrary dates', () => {
+  const day = resolveUserRankingDateRange('day', '2025-05-10');
+  assert.equal(day.granularity, 'day');
+  assert.equal(day.startDate, '2025-05-10');
+  assert.equal(day.endDate, '2025-05-10');
+  assert.equal(day.prevDate, '2025-05-09');
+  assert.equal(day.nextDate, '2025-05-11');
+  assert.equal(day.isCurrent, false);
+
+  const week = resolveUserRankingDateRange('week', '2025-05-07');
+  assert.equal(week.granularity, 'week');
+  assert.equal(week.startDate, '2025-05-05');
+  assert.equal(week.endDate, '2025-05-11');
+  assert.equal(week.prevDate, '2025-04-28');
+  assert.equal(week.nextDate, '2025-05-12');
+  assert.equal(week.isCurrent, false);
+
+  const leapMonth = resolveUserRankingDateRange('month', '2024-02-15');
+  assert.equal(leapMonth.granularity, 'month');
+  assert.equal(leapMonth.startDate, '2024-02-01');
+  assert.equal(leapMonth.endDate, '2024-02-29');
+  assert.equal(leapMonth.prevDate, '2024-01-01');
+  assert.equal(leapMonth.nextDate, '2024-03-01');
+  assert.equal(leapMonth.isCurrent, false);
+
+  const shortMonth = resolveUserRankingDateRange('month', '2024-02');
+  assert.equal(shortMonth.startDate, '2024-02-01');
+  assert.equal(shortMonth.endDate, '2024-02-29');
+
+  const all = resolveUserRankingDateRange('all');
+  assert.equal(all.granularity, 'all');
+  assert.equal(all.startDate, '2020-01-01');
+  assert.equal(all.endDate, all.today);
+  assert.equal(all.prevDate, null);
+  assert.equal(all.nextDate, null);
+  assert.equal(all.isCurrent, true);
+
+  const clamped = resolveUserRankingDateRange('day', '2099-12-31');
+  assert.equal(clamped.endDate, clamped.today);
+  assert.equal(clamped.isCurrent, true);
+  assert.equal(clamped.nextDate, null);
+
+  assert.throws(
+    () => resolveUserRankingDateRange('day', '2025-02-30'),
+    err => err.statusCode === 400
+  );
+  assert.throws(
+    () => resolveUserRankingDateRange('quarter', '2025-05-01'),
+    err => err.statusCode === 400
+  );
+});

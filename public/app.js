@@ -22,6 +22,15 @@ function dashboardApp() {
         userRankingUsers: [],
         userRankingMeta: null,
         userRankingRequestId: 0,
+        userRankingGranularity: 'day',
+        userRankingDate: '',
+        userRankingToday: '',
+        userRankingSortBy: 'total_tokens',
+        userRankingSortDir: 'desc',
+        lastRankingKeyNavAt: 0,
+        userRankingPickerOpen: false,
+        userRankingPickerYear: 2026,
+        userRankingPickerMonth: 1,
         countdown: 60,
         timer: null,
         searchQuery: '',
@@ -659,6 +668,11 @@ function dashboardApp() {
         },
 
         openUserRanking() {
+          const today = this.getShanghaiToday();
+          this.userRankingToday = today;
+          if (!this.userRankingDate) this.userRankingDate = today;
+          this.syncUserRankingPickerView();
+          this.userRankingPickerOpen = false;
           this.userRankingUsers = [];
           this.userRankingMeta = null;
           this.userRankingError = '';
@@ -668,8 +682,354 @@ function dashboardApp() {
 
         closeUserRanking() {
           this.userRankingRequestId++;
+          this.userRankingPickerOpen = false;
           this.showUserRankingModal = false;
           this.userRankingLoading = false;
+        },
+
+        getShanghaiToday() {
+          try {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Asia/Shanghai',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            }).formatToParts(new Date());
+            const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+            return `${values.year}-${values.month}-${values.day}`;
+          } catch (_) {
+            return new Date().toISOString().slice(0, 10);
+          }
+        },
+
+        shiftIsoDate(dateStr, offsetDays) {
+          const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (!match) return dateStr;
+          const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + offsetDays));
+          return date.toISOString().slice(0, 10);
+        },
+
+        shiftIsoMonth(dateStr, offsetMonths) {
+          const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (!match) return dateStr;
+          const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + offsetMonths, 1));
+          return date.toISOString().slice(0, 10);
+        },
+
+        getWeekBounds(dateStr) {
+          const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (!match) return { start: dateStr, end: dateStr };
+          const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+          const dayOfWeek = (date.getUTCDay() + 6) % 7;
+          const start = this.shiftIsoDate(dateStr, -dayOfWeek);
+          const end = this.shiftIsoDate(start, 6);
+          return { start, end };
+        },
+
+        get isUserRankingCurrentPeriod() {
+          if (this.userRankingGranularity === 'all') return true;
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const current = this.userRankingDate || today;
+          if (this.userRankingGranularity === 'day') return current >= today;
+          if (this.userRankingGranularity === 'week') {
+            return this.getWeekBounds(current).end >= today;
+          }
+          if (this.userRankingGranularity === 'month') {
+            return current.slice(0, 7) >= today.slice(0, 7);
+          }
+          return true;
+        },
+
+        get userRankingCurrentLabel() {
+          if (this.userRankingGranularity === 'week') return '本周';
+          if (this.userRankingGranularity === 'month') return '本月';
+          return '今天';
+        },
+
+        get userRankingPeriodLabel() {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const current = this.userRankingDate || today;
+          if (this.userRankingGranularity === 'all') return '全部累计';
+          if (this.userRankingGranularity === 'day') return current;
+          if (this.userRankingGranularity === 'week') {
+            const bounds = this.getWeekBounds(current);
+            const end = bounds.end > today ? today : bounds.end;
+            return `${bounds.start} ~ ${end}`;
+          }
+          if (this.userRankingGranularity === 'month') {
+            const match = current.match(/^(\d{4})-(\d{2})/);
+            return match ? `${match[1]}年${match[2]}月` : current;
+          }
+          return current;
+        },
+
+        get userRankingFooterText() {
+          if (!this.userRankingMeta) return '数据来源：Sub2API 用户排行';
+          const count = this.userRankingMeta.user_count;
+          const gran = this.userRankingMeta.granularity || this.userRankingGranularity;
+          if (gran === 'all') {
+            return `统计范围：全部累计（截至 ${this.userRankingMeta.end_date}） · ${count} 位用户`;
+          }
+          if (this.userRankingMeta.start_date === this.userRankingMeta.end_date) {
+            return `统计日期：${this.userRankingMeta.start_date} · ${count} 位用户`;
+          }
+          return `统计范围：${this.userRankingMeta.start_date} ~ ${this.userRankingMeta.end_date} · ${count} 位用户`;
+        },
+
+        get userRankingSortDescription() {
+          const labels = {
+            total_tokens: '总 Token',
+            requests: '请求次数',
+            input_tokens: '输入 Token',
+            output_tokens: '输出 Token',
+            cache_tokens: '缓存 Token'
+          };
+          const label = labels[this.userRankingSortBy] || '总 Token';
+          const dir = this.userRankingSortDir === 'asc' ? '升序' : '降序';
+          return `全站用户 · 按${label}${dir} · 全部有记录用户`;
+        },
+
+        get sortedUserRankingUsers() {
+          if (!Array.isArray(this.userRankingUsers) || this.userRankingUsers.length === 0) return [];
+          const field = this.userRankingSortBy || 'total_tokens';
+          const dir = this.userRankingSortDir === 'asc' ? 1 : -1;
+          return [...this.userRankingUsers].sort((a, b) => {
+            const va = Number(a?.[field]) || 0;
+            const vb = Number(b?.[field]) || 0;
+            if (va !== vb) return (va - vb) * dir;
+            const tie = (Number(b?.total_tokens) || 0) - (Number(a?.total_tokens) || 0);
+            if (tie !== 0) return tie;
+            return (Number(a?.user_id) || 0) - (Number(b?.user_id) || 0);
+          });
+        },
+
+        setUserRankingGranularity(granularity) {
+          if (!['day', 'week', 'month', 'all'].includes(granularity)) return;
+          if (this.userRankingGranularity === granularity) return;
+          this.userRankingGranularity = granularity;
+          this.userRankingPickerOpen = false;
+          if (!this.userRankingDate) {
+            this.userRankingDate = this.userRankingToday || this.getShanghaiToday();
+          }
+          this.syncUserRankingPickerView();
+          this.fetchUserRanking();
+        },
+
+        canShiftUserRanking(delta) {
+          if (this.userRankingGranularity === 'all') return false;
+          if (delta > 0 && this.isUserRankingCurrentPeriod) return false;
+          return true;
+        },
+
+        getUserRankingShiftTooltip(delta) {
+          if (this.userRankingGranularity === 'all') return '累计总榜不支持按时间前后切换';
+          if (delta > 0 && this.isUserRankingCurrentPeriod) return `已是最新${this.userRankingCurrentLabel}`;
+          const unit = this.userRankingGranularity === 'week'
+            ? '周'
+            : (this.userRankingGranularity === 'month' ? '月' : '天');
+          return delta < 0 ? `上一${unit} (←)` : `下一${unit} (→)`;
+        },
+
+        shiftUserRankingPeriod(delta) {
+          if (!this.canShiftUserRanking(delta)) return;
+          this.userRankingPickerOpen = false;
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const current = this.userRankingDate || today;
+          if (this.userRankingGranularity === 'day') {
+            let next = this.shiftIsoDate(current, delta);
+            if (next > today) next = today;
+            this.userRankingDate = next;
+          } else if (this.userRankingGranularity === 'week') {
+            const start = this.getWeekBounds(current).start;
+            let next = this.shiftIsoDate(start, delta * 7);
+            const currentWeekStart = this.getWeekBounds(today).start;
+            if (next > currentWeekStart) next = currentWeekStart;
+            this.userRankingDate = next;
+          } else if (this.userRankingGranularity === 'month') {
+            let next = this.shiftIsoMonth(current, delta);
+            const currentMonthStart = `${today.slice(0, 7)}-01`;
+            if (next > currentMonthStart) next = currentMonthStart;
+            this.userRankingDate = next;
+          }
+          this.fetchUserRanking();
+        },
+
+        resetUserRankingToCurrent() {
+          if (this.userRankingGranularity === 'all') return;
+          this.userRankingPickerOpen = false;
+          const today = this.userRankingToday || this.getShanghaiToday();
+          this.userRankingDate = today;
+          this.syncUserRankingPickerView();
+          this.fetchUserRanking();
+        },
+
+        syncUserRankingPickerView() {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const base = /^\d{4}-\d{2}-\d{2}$/.test(this.userRankingDate) ? this.userRankingDate : today;
+          this.userRankingPickerYear = Number(base.slice(0, 4));
+          this.userRankingPickerMonth = Number(base.slice(5, 7));
+        },
+
+        toggleUserRankingPicker() {
+          if (this.userRankingGranularity === 'all') return;
+          if (!this.userRankingPickerOpen) {
+            this.syncUserRankingPickerView();
+          }
+          this.userRankingPickerOpen = !this.userRankingPickerOpen;
+        },
+
+        canShiftUserRankingPickerView(delta) {
+          if (delta < 0) return this.userRankingPickerYear > 2020;
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const maxYear = Number(today.slice(0, 4));
+          const maxMonth = Number(today.slice(5, 7));
+          if (this.userRankingGranularity === 'month') {
+            return this.userRankingPickerYear < maxYear;
+          }
+          return this.userRankingPickerYear < maxYear ||
+            (this.userRankingPickerYear === maxYear && this.userRankingPickerMonth < maxMonth);
+        },
+
+        shiftUserRankingPickerView(delta) {
+          if (!this.canShiftUserRankingPickerView(delta)) return;
+          if (this.userRankingGranularity === 'month') {
+            this.userRankingPickerYear += delta;
+            return;
+          }
+          const d = new Date(Date.UTC(this.userRankingPickerYear, this.userRankingPickerMonth - 1 + delta, 1));
+          this.userRankingPickerYear = d.getUTCFullYear();
+          this.userRankingPickerMonth = d.getUTCMonth() + 1;
+        },
+
+        selectUserRankingDay(dateStr) {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          if (!dateStr || dateStr > today) return;
+          this.userRankingDate = dateStr;
+          this.userRankingPickerOpen = false;
+          this.fetchUserRanking();
+        },
+
+        selectUserRankingWeek(weekStart) {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          if (!weekStart || weekStart > today) return;
+          this.userRankingDate = weekStart;
+          this.userRankingPickerOpen = false;
+          this.fetchUserRanking();
+        },
+
+        selectUserRankingMonth(monthStart) {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const currentMonth = `${today.slice(0, 7)}-01`;
+          if (!monthStart || monthStart > currentMonth) return;
+          this.userRankingDate = monthStart;
+          this.userRankingPickerOpen = false;
+          this.fetchUserRanking();
+        },
+
+        get userRankingCalendarWeeks() {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const selected = this.userRankingDate || today;
+          const selectedWeek = this.getWeekBounds(selected);
+          const year = this.userRankingPickerYear || Number(today.slice(0, 4));
+          const month = this.userRankingPickerMonth || Number(today.slice(5, 7));
+          const monthFirstDate = new Date(Date.UTC(year, month - 1, 1));
+          const monthFirstStr = monthFirstDate.toISOString().slice(0, 10);
+          const firstDow = (monthFirstDate.getUTCDay() + 6) % 7;
+          const gridStart = this.shiftIsoDate(monthFirstStr, -firstDow);
+          const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+          const totalRows = Math.ceil((firstDow + daysInMonth) / 7);
+
+          const weeks = [];
+          for (let w = 0; w < totalRows; w++) {
+            const weekStart = this.shiftIsoDate(gridStart, w * 7);
+            const weekEnd = this.shiftIsoDate(weekStart, 6);
+            const isSelectedWeek = this.userRankingGranularity === 'week' && selectedWeek.start === weekStart;
+            const isCurrentWeek = weekStart <= today && today <= weekEnd;
+            const isFutureWeek = weekStart > today;
+            const days = [];
+            for (let d = 0; d < 7; d++) {
+              const dateStr = this.shiftIsoDate(weekStart, d);
+              days.push({
+                dateStr,
+                dayNum: Number(dateStr.slice(8, 10)),
+                inMonth: Number(dateStr.slice(5, 7)) === month,
+                isSelected: this.userRankingGranularity === 'day' && dateStr === selected,
+                isToday: dateStr === today,
+                isDisabled: dateStr > today
+              });
+            }
+            weeks.push({
+              weekStart,
+              weekEnd,
+              isSelectedWeek,
+              isCurrentWeek,
+              isFutureWeek,
+              days
+            });
+          }
+          return weeks;
+        },
+
+        get userRankingCalendarMonths() {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const selectedYm = (this.userRankingDate || today).slice(0, 7);
+          const currentYm = today.slice(0, 7);
+          const year = this.userRankingPickerYear || Number(today.slice(0, 4));
+          const months = [];
+          for (let m = 1; m <= 12; m++) {
+            const mm = String(m).padStart(2, '0');
+            const ym = `${year}-${mm}`;
+            months.push({
+              month: m,
+              label: `${m}月`,
+              value: `${ym}-01`,
+              isSelected: ym === selectedYm,
+              isCurrent: ym === currentYm,
+              isDisabled: ym > currentYm
+            });
+          }
+          return months;
+        },
+
+        onUserRankingPickerDate(value) {
+          const today = this.userRankingToday || this.getShanghaiToday();
+          const raw = String(value || '').trim();
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            this.userRankingDate = today;
+            return;
+          }
+          this.userRankingDate = raw > today ? today : raw;
+          this.syncUserRankingPickerView();
+          this.fetchUserRanking();
+        },
+
+        handleUserRankingKeydown(event, delta) {
+          if (!this.showUserRankingModal) return;
+          if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+          const active = document.activeElement;
+          if (
+            active &&
+            (['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.isContentEditable)
+          ) {
+            return;
+          }
+          if (!this.canShiftUserRanking(delta)) return;
+          const now = Date.now();
+          if (event.repeat && now - this.lastRankingKeyNavAt < 180) return;
+          this.lastRankingKeyNavAt = now;
+          event.preventDefault();
+          this.shiftUserRankingPeriod(delta);
+        },
+
+        toggleUserRankingSort(field) {
+          const allowed = ['requests', 'input_tokens', 'output_tokens', 'cache_tokens', 'total_tokens'];
+          if (!allowed.includes(field)) return;
+          if (this.userRankingSortBy === field) {
+            this.userRankingSortDir = this.userRankingSortDir === 'desc' ? 'asc' : 'desc';
+          } else {
+            this.userRankingSortBy = field;
+            this.userRankingSortDir = 'desc';
+          }
         },
 
         async fetchUserRanking() {
@@ -677,7 +1037,13 @@ function dashboardApp() {
           this.userRankingLoading = true;
           this.userRankingError = '';
           try {
-            const res = await fetch('/api/usage/user-ranking', { credentials: 'same-origin' });
+            const params = new URLSearchParams({
+              granularity: this.userRankingGranularity || 'day'
+            });
+            if (this.userRankingGranularity !== 'all' && this.userRankingDate) {
+              params.set('date', this.userRankingDate);
+            }
+            const res = await fetch(`/api/usage/user-ranking?${params.toString()}`, { credentials: 'same-origin' });
             const json = await res.json();
             if (requestId !== this.userRankingRequestId) return;
             if (!json.success) {
@@ -688,6 +1054,12 @@ function dashboardApp() {
             }
             this.userRankingUsers = json.data?.users || [];
             this.userRankingMeta = json.data || null;
+            if (json.data?.today) {
+              this.userRankingToday = json.data.today;
+            }
+            if (json.data?.anchor_date && this.userRankingGranularity !== 'all') {
+              this.userRankingDate = json.data.anchor_date;
+            }
           } catch (err) {
             if (requestId !== this.userRankingRequestId) return;
             this.userRankingError = '请求异常: ' + err.message;
@@ -1280,14 +1652,31 @@ function dashboardApp() {
           if (this.sortBy === 'default') return list;
           const field = this.sortBy;
           return [...list].sort((a, b) => {
-            const va = a.usage?.[field];
-            const vb = b.usage?.[field];
+            const rawA = a.usage?.[field];
+            const rawB = b.usage?.[field];
+            const va = rawA == null ? null : Number(rawA);
+            const vb = rawB == null ? null : Number(rawB);
+            const validA = va != null && Number.isFinite(va);
+            const validB = vb != null && Number.isFinite(vb);
             // null 值排到最后
-            if (va == null && vb == null) return 0;
-            if (va == null) return 1;
-            if (vb == null) return -1;
+            if (!validA && !validB) return 0;
+            if (!validA) return 1;
+            if (!validB) return -1;
             return vb - va;
           });
+        },
+
+        get sortByLabel() {
+          const labels = {
+            default: '默认排序',
+            usage_5h: '5小时用量 ↓',
+            usage_7d: '7天用量 ↓',
+            usage_monthly: '月度用量 ↓',
+            today_tokens: '今日 Token ↓',
+            today_requests: '请求次数 ↓',
+            balance_remaining: '剩余余额 ↓'
+          };
+          return labels[this.sortBy] || '默认排序';
         },
 
         async login() {
