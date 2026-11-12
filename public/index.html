@@ -670,40 +670,57 @@
               <!-- Sub2API 今日 Token 用量 -->
               <div
                 class="q-metric q-today-metric q-slot-4"
-                x-show="item.sub2api_linked && settings.visible_fields?.today_tokens !== false"
-                :data-tooltip="item.usage?.today_tokens != null ? ('来自 Sub2API 的今日累计 Token 用量' + (item.usage?.today_stats_at ? '，更新于 ' + formatRelativeTime(item.usage.today_stats_at) : '')) : '今日用量尚未从 Sub2API 同步'"
+                x-show="item.sub2api_linked && (settings.visible_fields?.today_tokens !== false || (settings.visible_fields?.sub2api_top_users !== false && Array.isArray(item.sub2api_top_users) && item.sub2api_top_users.length > 0))"
               >
-                <div class="q-metric-top">
-                  <span class="q-label">今日用量</span>
-                  <span class="q-value teal" x-text="item.usage?.today_tokens != null ? formatTokenMillions(item.usage.today_tokens) : '—'"></span>
-                </div>
+                <div class="q-today-stack">
                 <div
-                  class="q-foot"
-                  x-text="item.usage?.today_requests != null ? (formatInteger(item.usage.today_requests) + ' 次请求') : (item.usage?.today_tokens != null ? '0 次请求' : '等待 Sub2API 同步')"
-                ></div>
-              </div>
+                  x-show="settings.visible_fields?.today_tokens !== false"
+                  :data-tooltip="item.usage?.today_tokens != null || item.usage?.today_requests != null ? ('今日累计 ' + formatInteger(item.usage?.today_requests ?? 0) + ' 次请求 · ' + formatTokenMillions(item.usage?.today_tokens ?? 0) + ' Token' + (item.usage?.today_stats_at ? '（更新于 ' + formatRelativeTime(item.usage.today_stats_at) + '）' : '')) : '今日用量尚未从 Sub2API 同步'"
+                >
+                  <div class="q-metric-top">
+                    <span class="q-label" x-show="item.usage?.today_requests == null && item.usage?.today_tokens == null">今日统计</span>
+                    <span
+                      class="q-value indigo inline-flex items-baseline gap-0.5"
+                      x-show="item.usage?.today_requests != null || item.usage?.today_tokens != null"
+                    >
+                      <span class="num-tabular font-bold" x-text="formatInteger(item.usage?.today_requests ?? 0)"></span>
+                      <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">次</span>
+                    </span>
+                    <span
+                      class="q-value"
+                      :class="item.usage?.today_tokens != null ? 'teal' : 'muted'"
+                      x-text="item.usage?.today_tokens != null ? formatTokenMillions(item.usage.today_tokens) : '—'"
+                    ></span>
+                  </div>
+                  <div
+                    class="q-foot"
+                    x-show="item.usage?.today_requests == null && item.usage?.today_tokens == null"
+                  >等待 Sub2API 同步</div>
+                </div>
 
-              <!-- 今日使用前 3 用户 -->
-              <div
-                class="q-top-users"
-                x-show="item.sub2api_linked && settings.visible_fields?.sub2api_top_users !== false && Array.isArray(item.sub2api_top_users) && item.sub2api_top_users.length > 0"
-                x-cloak
-              >
-                <span class="q-top-users-label" data-tooltip="今日使用该账号 Token 消耗前三的用户">
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
-                </span>
-                <template x-for="(u, uIdx) in (item.sub2api_top_users || []).slice(0, 3)" :key="'tu-' + item.id + '-' + u.user_id">
-                  <span
-                    class="q-top-user"
-                    :class="'rank-' + (uIdx + 1)"
-                    :data-tooltip="'今日 Top ' + (uIdx + 1) + ' · ' + u.username + '：' + formatCompactToken(u.tokens) + ' tokens · ' + formatInteger(u.requests) + ' 次请求'"
-                  >
-                    <span class="q-top-user-rank num-tabular" x-text="uIdx + 1"></span>
-                    <span class="q-top-user-name" x-text="u.username"></span>
+                <!-- 今日使用前 3 用户 -->
+                <div
+                  class="q-top-users"
+                  x-show="settings.visible_fields?.sub2api_top_users !== false && Array.isArray(item.sub2api_top_users) && item.sub2api_top_users.length > 0"
+                  x-cloak
+                >
+                  <span class="q-top-users-label" data-tooltip="今日使用该账号 Token 消耗前三的用户">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
                   </span>
-                </template>
+                  <template x-for="(u, uIdx) in (item.sub2api_top_users || []).slice(0, 3)" :key="'tu-' + item.id + '-' + u.user_id">
+                    <span
+                      class="q-top-user"
+                      :class="'rank-' + (uIdx + 1)"
+                      :data-tooltip="'今日 Top ' + (uIdx + 1) + ' · ' + u.username + '：' + formatCompactToken(u.tokens) + ' tokens · ' + formatInteger(u.requests) + ' 次请求'"
+                    >
+                      <span class="q-top-user-rank num-tabular" x-text="uIdx + 1"></span>
+                      <span class="q-top-user-name" x-text="u.username"></span>
+                    </span>
+                  </template>
+                </div>
+                </div>
               </div>
 
               <div class="q-metric q-slot-1" x-show="!item.usage">
@@ -1177,7 +1194,6 @@
         </div>
       </div>
 
-      <div class="px-6 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-shrink-0 bg-slate-50/70 dark:bg-slate-800/60">
       <div class="px-6 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5 flex-shrink-0 bg-slate-50/70 dark:bg-slate-800/60">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-teal-200/80 dark:border-teal-800/60 bg-teal-50/70 dark:bg-teal-950/40 text-xs font-semibold text-teal-800 dark:text-teal-300 num-tabular">
           <svg class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

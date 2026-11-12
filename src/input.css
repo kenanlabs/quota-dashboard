@@ -528,7 +528,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 14px 22px;
-      padding: 14px 20px;
+      padding: 18px 20px;
       border-bottom: 1px solid var(--q-line);
       background: var(--q-surface);
       transition: background-color var(--q-dur) var(--q-ease);
@@ -661,13 +661,12 @@
     }
 
     .q-top-users {
-      grid-column: 1 / -1;
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
-      justify-content: flex-end;
-      gap: 5px;
-      margin-top: 0;
+      justify-content: flex-start;
+      gap: 4px;
+      margin-top: 10px;
     }
     .q-top-users-label {
       display: inline-flex;
@@ -684,13 +683,13 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      max-width: 130px;
+      max-width: 82px;
       padding: 1px 6px 1px 2.5px;
       border: 1px solid var(--q-line);
       border-radius: 999px;
       background: var(--q-surface-muted);
       color: var(--q-body);
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 600;
       line-height: 1.35;
       transition: border-color var(--q-dur) var(--q-ease), background-color var(--q-dur) var(--q-ease);
@@ -742,8 +741,9 @@
 
     .q-rail-metrics {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px 18px;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(220px, 1.35fr);
+      align-items: start;
+      gap: 18px;
       min-width: 500px;
       flex: 2 1 560px;
     }
@@ -757,6 +757,25 @@
       align-items: baseline;
       justify-content: space-between;
       gap: 8px;
+    }
+    .q-today-metric .q-metric-top {
+      width: 100%;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .q-today-metric {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .q-today-stack {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: stretch;
+      max-width: 100%;
+    }
+    .q-today-metric .q-foot {
+      text-align: right;
     }
     .q-label {
       color: var(--q-muted);
@@ -777,6 +796,8 @@
     .q-value.amber { color: var(--q-amber); }
     .q-value.rose { color: var(--q-rose); }
     .q-value.teal { color: var(--q-teal); }
+    .q-value.indigo { color: #6366f1; }
+    body[data-appearance="dark"] .q-value.indigo { color: #818cf8; }
     .q-value.muted { color: var(--q-faint); }
     .q-meter {
       height: 4px;
@@ -1158,8 +1179,17 @@
         grid-column: auto;
       }
       .q-top-users {
-        grid-column: auto;
+        flex-wrap: wrap;
         justify-content: flex-start;
+      }
+      .q-today-metric {
+        align-items: flex-start;
+      }
+      .q-today-metric .q-metric-top {
+        justify-content: flex-start;
+      }
+      .q-today-metric .q-foot {
+        text-align: left;
       }
       .q-rail-side {
         width: 100%;
