@@ -6,6 +6,7 @@ const {
   parseEarliestTrendDate,
   aggregateAccountTopUsers,
   parseAccountUsageRanking,
+  parseAccountUsageStats,
   resolveUserRankingDateRange
 } = require('../services/sub2api');
 
@@ -219,4 +220,26 @@ test('Sub2API account ranking aggregates usage records by account and token tota
       total_tokens: 700
     }
   ]);
+});
+
+test('Sub2API account stats parser reads exact upstream aggregate fields', () => {
+  assert.deepEqual(parseAccountUsageStats({
+    code: 0,
+    data: {
+      total_requests: 321,
+      total_input_tokens: 1000,
+      total_output_tokens: 200,
+      total_cache_tokens: 300,
+      total_cache_creation_tokens: 120,
+      total_cache_read_tokens: 180,
+      total_tokens: 1500
+    }
+  }), {
+    requests: 321,
+    input_tokens: 1000,
+    output_tokens: 200,
+    cache_tokens: 300,
+    total_tokens: 1500
+  });
+  assert.equal(parseAccountUsageStats({ code: 0, data: { message: 'nope' } }), null);
 });

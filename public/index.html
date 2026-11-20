@@ -898,28 +898,28 @@
                 @click="setUserRankingGranularity('day')"
                 :class="userRankingGranularity === 'day' ? 'is-active' : ''"
                 :aria-pressed="userRankingGranularity === 'day'"
-                data-tooltip="按天查看用户用量排行"
+                :data-tooltip="'按天查看' + (rankingType === 'account' ? '账号' : '用户') + '用量排行'"
               >日</button>
               <button
                 type="button"
                 @click="setUserRankingGranularity('week')"
                 :class="userRankingGranularity === 'week' ? 'is-active' : ''"
                 :aria-pressed="userRankingGranularity === 'week'"
-                data-tooltip="按周查看用户用量排行"
+                :data-tooltip="'按周查看' + (rankingType === 'account' ? '账号' : '用户') + '用量排行'"
               >周</button>
               <button
                 type="button"
                 @click="setUserRankingGranularity('month')"
                 :class="userRankingGranularity === 'month' ? 'is-active' : ''"
                 :aria-pressed="userRankingGranularity === 'month'"
-                data-tooltip="按月查看用户用量排行"
+                :data-tooltip="'按月查看' + (rankingType === 'account' ? '账号' : '用户') + '用量排行'"
               >月</button>
               <button
                 type="button"
                 @click="setUserRankingGranularity('all')"
                 :class="userRankingGranularity === 'all' ? 'is-active' : ''"
                 :aria-pressed="userRankingGranularity === 'all'"
-                data-tooltip="查看全部时间累计总排行"
+                :data-tooltip="'查看全部时间累计' + (rankingType === 'account' ? '账号' : '用户') + '总排行'"
               >总</button>
             </div>
 

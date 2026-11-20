@@ -551,6 +551,71 @@ function parseAccountUsageRanking(payload, options = {}) {
       (a.account_id - b.account_id));
 }
 
+function parseAccountUsageStats(payload) {
+  const data = payload && payload.data !== undefined ? payload.data : payload;
+  if (!data || typeof data !== 'object' ||
+      (!('total_requests' in data) && !('total_tokens' in data))) {
+    return null;
+  }
+  return {
+    requests: normalizeTokenCount(data.total_requests),
+    input_tokens: normalizeTokenCount(data.total_input_tokens),
+    output_tokens: normalizeTokenCount(data.total_output_tokens),
+    cache_tokens: normalizeTokenCount(data.total_cache_tokens) ||
+      (normalizeTokenCount(data.total_cache_creation_tokens) +
+        normalizeTokenCount(data.total_cache_read_tokens)),
+    total_tokens: normalizeTokenCount(data.total_tokens)
+  };
+}
+
+async function fetchAccountUsageStats(baseUrl, apiKey, accountId, startDate, endDate) {
+  try {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/usage/stats`, {
+      params: {
+        account_id: accountId,
+        start_date: startDate,
+        end_date: endDate,
+        timezone: 'Asia/Shanghai'
+      },
+      headers: getAuthHeaders(apiKey),
+      timeout: 15000
+    });
+    const stats = parseAccountUsageStats(res.data);
+    return stats ? { ok: true, stats } : { ok: false, stats: null };
+  } catch (_) {
+    return { ok: false, stats: null };
+  }
+}
+
+async function fetchAccountRankingFromUsageLogs(baseUrl, apiKey, startDate, endDate) {
+  const allItems = [];
+  const pageSize = 200;
+  const maxPages = 20;
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await safeGet(`${baseUrl}/api/v1/admin/usage`, {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        timezone: 'Asia/Shanghai',
+        page,
+        page_size: pageSize,
+        sort_by: 'created_at',
+        sort_order: 'desc',
+        exact_total: false
+      },
+      headers: getAuthHeaders(apiKey),
+      timeout: 20000
+    });
+    const items = extractUsageItems(res.data);
+    allItems.push(...items);
+    if (items.length < pageSize) break;
+    const lastRawDate = items[items.length - 1] &&
+      (items[items.length - 1].created_at || items[items.length - 1].date);
+    if (lastRawDate && String(lastRawDate).slice(0, 10) < startDate) break;
+  }
+  return parseAccountUsageRanking(allItems, { startDate, endDate });
+}
+
 async function fetchAccountTokenRanking(db, range = 'day', date = null) {
   const dates = resolveUserRankingDateRange(range, date);
   const { url, key } = getSub2apiAdminCredentials(db);
@@ -559,40 +624,10 @@ async function fetchAccountTokenRanking(db, range = 'day', date = null) {
   }
 
   const baseUrl = normalizeUrl(url);
-  const rankingCacheKey = `account:${baseUrl}:${dates.granularity}:${dates.startDate}:${dates.endDate}`;
+  const rankingCacheKey = `account-v2:${baseUrl}:${dates.granularity}:${dates.startDate}:${dates.endDate}`;
   const cachedRanking = userRankingCache.get(rankingCacheKey);
   if (cachedRanking && cachedRanking.expiresAt > Date.now()) {
     return cachedRanking.value;
-  }
-
-  const allItems = [];
-  const pageSize = 200;
-  const maxPages = 20;
-  try {
-    for (let page = 1; page <= maxPages; page++) {
-      const res = await safeGet(`${baseUrl}/api/v1/admin/usage`, {
-        params: {
-          start_date: dates.startDate,
-          end_date: dates.endDate,
-          timezone: 'Asia/Shanghai',
-          page,
-          page_size: pageSize,
-          sort_by: 'created_at',
-          sort_order: 'desc',
-          exact_total: false
-        },
-        headers: getAuthHeaders(key),
-        timeout: 20000
-      });
-      const items = extractUsageItems(res.data);
-      allItems.push(...items);
-      if (items.length < pageSize) break;
-      const lastRawDate = items[items.length - 1] &&
-        (items[items.length - 1].created_at || items[items.length - 1].date);
-      if (lastRawDate && String(lastRawDate).slice(0, 10) < dates.startDate) break;
-    }
-  } catch (err) {
-    throw clientError(formatSub2apiError(err));
   }
 
   let earliestDate = null;
@@ -602,10 +637,55 @@ async function fetchAccountTokenRanking(db, range = 'day', date = null) {
   const effectiveStartDate = earliestDate && earliestDate <= dates.endDate
     ? earliestDate
     : dates.startDate;
-  const accounts = parseAccountUsageRanking(allItems, {
-    startDate: effectiveStartDate,
-    endDate: dates.endDate
-  });
+
+  const localAccounts = db.prepare(`
+    SELECT display_name, provider, sub2api_account_id
+    FROM api_keys
+    WHERE enabled = 1 AND sub2api_account_id IS NOT NULL
+    ORDER BY sort_order ASC, id ASC
+  `).all();
+  const uniqueAccounts = Array.from(new Map(
+    localAccounts.map(item => [Number(item.sub2api_account_id), item])
+  ).values());
+
+  let accounts = [];
+  if (uniqueAccounts.length > 0) {
+    const statResults = await mapWithConcurrency(uniqueAccounts, 4, async item => {
+      const accountId = Number(item.sub2api_account_id);
+      const result = await fetchAccountUsageStats(
+        baseUrl, key, accountId, effectiveStartDate, dates.endDate
+      );
+      return {
+        accountId,
+        name: String(item.display_name || `账号 #${accountId}`).trim().slice(0, 160),
+        platform: String(item.provider || '').trim().slice(0, 80),
+        ...result
+      };
+    });
+    const successful = statResults.filter(item => item.ok);
+    if (successful.length > 0) {
+      accounts = successful.map(item => ({
+        account_id: item.accountId,
+        name: item.name,
+        platform: item.platform,
+        requests: item.stats.requests,
+        input_tokens: item.stats.input_tokens,
+        output_tokens: item.stats.output_tokens,
+        cache_tokens: item.stats.cache_tokens,
+        total_tokens: item.stats.total_tokens
+      })).sort((a, b) => (b.total_tokens - a.total_tokens) ||
+        (b.requests - a.requests) ||
+        (a.account_id - b.account_id));
+    } else {
+      try {
+        accounts = await fetchAccountRankingFromUsageLogs(
+          baseUrl, key, effectiveStartDate, dates.endDate
+        );
+      } catch (err) {
+        throw clientError(formatSub2apiError(err));
+      }
+    }
+  }
 
   const ranking = {
     range: dates.range,
@@ -2017,6 +2097,7 @@ module.exports = {
   aggregateAccountTopUsers,
   syncTopUsersForAccounts,
   parseAccountUsageRanking,
+  parseAccountUsageStats,
   fetchAccountTokenRanking,
   resolveUserRankingDateRange,
   parseUserRanking,
