@@ -5,6 +5,7 @@ const {
   parseEarliestUsageDate,
   parseEarliestTrendDate,
   aggregateAccountTopUsers,
+  parseAccountUsageRanking,
   resolveUserRankingDateRange
 } = require('../services/sub2api');
 
@@ -180,5 +181,42 @@ test('Sub2API account top users filters to target Shanghai calendar day when dat
 
   assert.deepEqual(top, [
     { user_id: 2, username: 'Bob', tokens: 500, requests: 1 }
+  ]);
+});
+
+test('Sub2API account ranking aggregates usage records by account and token total', () => {
+  const accounts = parseAccountUsageRanking({
+    code: 0,
+    data: {
+      items: [
+        { account_id: 11, account: { name: 'Kimi Pool', platform: 'kimi' }, requests: 5, input_tokens: 100, output_tokens: 50, cache_tokens: 50, total_tokens: 200, created_at: '2026-11-12T12:00:00Z' },
+        { account_id: 12, account: { name: 'GLM Pool', platform: 'zhipu' }, requests: 3, total_tokens: 900, created_at: '2026-11-12T11:00:00Z' },
+        { account_id: 11, account: { name: 'Kimi Pool', platform: 'kimi' }, requests: 2, total_tokens: 500, created_at: '2026-11-12T10:00:00Z' },
+        { account_id: 13, account: { name: 'Old Pool' }, requests: 100, total_tokens: 5000, created_at: '2026-11-10T10:00:00Z' }
+      ]
+    }
+  }, { startDate: '2026-11-12', endDate: '2026-11-12' });
+
+  assert.deepEqual(accounts, [
+    {
+      account_id: 12,
+      name: 'GLM Pool',
+      platform: 'zhipu',
+      requests: 3,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_tokens: 0,
+      total_tokens: 900
+    },
+    {
+      account_id: 11,
+      name: 'Kimi Pool',
+      platform: 'kimi',
+      requests: 7,
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_tokens: 50,
+      total_tokens: 700
+    }
   ]);
 });

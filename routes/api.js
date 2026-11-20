@@ -352,6 +352,20 @@ router.get('/usage/user-ranking', userRankingLimiter, async (req, res) => {
   }
 });
 
+router.get('/usage/account-ranking', userRankingLimiter, async (req, res) => {
+  try {
+    const granularity = req.query.granularity || req.query.range || 'day';
+    const date = req.query.date ? String(req.query.date) : null;
+    const ranking = await require('../services/sub2api').fetchAccountTokenRanking(db, granularity, date);
+    return res.json({
+      success: true,
+      data: ranking
+    });
+  } catch (err) {
+    return errorResponse(res, err, 'public.usage.account-ranking');
+  }
+});
+
 router.post('/usage/:id/sub2api/schedulable', publicControlLimiter, requirePublicCsrf, async (req, res) => {
   let key = null;
   try {

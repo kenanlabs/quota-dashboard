@@ -856,7 +856,7 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m6 10V5m6 14v-7m4 7H2"/>
                 </svg>
               </span>
-              用户用量排行
+              <span x-text="rankingType === 'account' ? '账号用量排行' : '用户用量排行'"></span>
             </h3>
             <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400" x-text="userRankingSortDescription"></p>
           </div>
@@ -875,6 +875,23 @@
         <!-- 时间粒度切换与日期导航 -->
         <div class="mt-3.5 flex flex-wrap items-center justify-between gap-2.5">
           <div class="flex flex-wrap items-center gap-2">
+            <div class="q-display-toggle" role="group" aria-label="排行对象">
+              <button
+                type="button"
+                @click="setRankingType('user')"
+                :class="rankingType === 'user' ? 'is-active' : ''"
+                :aria-pressed="rankingType === 'user'"
+                data-tooltip="按用户查看排行"
+              >用户</button>
+              <button
+                type="button"
+                @click="setRankingType('account')"
+                :class="rankingType === 'account' ? 'is-active' : ''"
+                :aria-pressed="rankingType === 'account'"
+                data-tooltip="按 Sub2API 账号查看排行"
+              >账号</button>
+            </div>
+
             <div class="q-display-toggle" role="group" aria-label="排行时间粒度">
               <button
                 type="button"
@@ -1120,14 +1137,14 @@
         </div>
 
         <div
-          x-show="!userRankingLoading && !userRankingError && userRankingUsers.length === 0"
+          x-show="!userRankingLoading && !userRankingError && userRankingRows.length === 0"
           x-cloak
           class="py-14 text-center text-sm text-slate-400 dark:text-slate-500"
-          x-text="userRankingPeriodLabel + ' 暂无用户消耗记录'"
+          x-text="userRankingPeriodLabel + (rankingType === 'account' ? ' 暂无账号消耗记录' : ' 暂无用户消耗记录')"
         ></div>
 
         <div
-          x-show="!userRankingLoading && !userRankingError && userRankingUsers.length > 0"
+          x-show="!userRankingLoading && !userRankingError && userRankingRows.length > 0"
           x-cloak
           class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800"
         >
@@ -1135,7 +1152,7 @@
             <thead class="bg-slate-50 dark:bg-slate-800/80">
               <tr class="text-slate-500 dark:text-slate-400">
                 <th class="px-4 py-3 text-left font-semibold">#</th>
-                <th class="px-4 py-3 text-left font-semibold">用户</th>
+                <th class="px-4 py-3 text-left font-semibold" x-text="rankingType === 'account' ? '账号' : '用户'"></th>
                 <th class="px-4 py-3 text-right font-semibold">
                   <button type="button" @click="toggleUserRankingSort('requests')" class="q-rank-sort-btn ml-auto" :class="userRankingSortBy === 'requests' ? 'is-active' : ''">
                     <span>请求</span>
@@ -1169,7 +1186,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-              <template x-for="(user, index) in sortedUserRankingUsers" :key="user.user_id">
+              <template x-for="(user, index) in userRankingRows" :key="rankingType === 'account' ? user.account_id : user.user_id">
                 <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                   <td class="px-4 py-3">
                     <span
@@ -1179,8 +1196,8 @@
                     ></span>
                   </td>
                   <td class="px-4 py-3">
-                    <div class="font-semibold text-slate-800 dark:text-slate-100" x-text="user.username"></div>
-                    <div class="mt-0.5 text-[10px] text-slate-400" x-text="'#' + user.user_id"></div>
+                    <div class="font-semibold text-slate-800 dark:text-slate-100" x-text="rankingType === 'account' ? (user.name || ('账号 #' + user.account_id)) : user.username"></div>
+                    <div class="mt-0.5 text-[10px] text-slate-400" x-text="rankingType === 'account' ? ((user.platform || 'Sub2API') + ' · #' + user.account_id) : ('#' + user.user_id)"></div>
                   </td>
                   <td class="px-4 py-3 text-right num-tabular" :class="userRankingSortBy === 'requests' ? 'font-bold text-teal-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-300'" x-text="formatInteger(user.requests)"></td>
                   <td class="px-4 py-3 text-right num-tabular" :class="userRankingSortBy === 'input_tokens' ? 'font-bold text-teal-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-300'" :data-tooltip="formatInteger(user.input_tokens) + ' tokens'" x-text="formatCompactToken(user.input_tokens)"></td>
@@ -1210,7 +1227,7 @@
           x-show="userRankingMeta"
           x-cloak
           class="text-xs text-slate-500 dark:text-slate-400"
-        >共 <strong class="font-semibold text-slate-800 dark:text-slate-100 num-tabular" x-text="userRankingMeta?.user_count ?? 0"></strong> 位用户</span>
+        >共 <strong class="font-semibold text-slate-800 dark:text-slate-100 num-tabular" x-text="rankingType === 'account' ? (userRankingMeta?.account_count ?? 0) : (userRankingMeta?.user_count ?? 0)"></strong> <span x-text="rankingType === 'account' ? '个账号' : '位用户'"></span></span>
       </div>
     </div>
   </div>

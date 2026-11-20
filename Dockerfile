@@ -40,7 +40,14 @@ RUN npm ci --omit=dev --registry="$NPM_REGISTRY"
 FROM node:24-bookworm-slim
 
 ENV NODE_ENV=production
+ENV TZ=Asia/Shanghai
 WORKDIR /app
+
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends tzdata > /dev/null && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=production-deps /app/node_modules ./node_modules
 COPY package.json ./

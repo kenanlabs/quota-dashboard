@@ -486,6 +486,162 @@ function aggregateAccountTopUsers(payload, limit = 3, options = {}) {
     .slice(0, Math.max(1, limit));
 }
 
+function parseAccountUsageRanking(payload, options = {}) {
+  const items = extractUsageItems(payload);
+  const startDate = options.startDate || null;
+  const endDate = options.endDate || null;
+  const byAccount = new Map();
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+
+    if (startDate && endDate) {
+      const rawDate = item.date || item.created_at || item.createdAt || item.timestamp;
+      if (rawDate) {
+        const itemDate = String(rawDate).slice(0, 10);
+        if (itemDate < startDate || itemDate > endDate) continue;
+      }
+    }
+
+    const accountId = Number(
+      item.account_id || (item.account && item.account.id) || item.accountId
+    ) || 0;
+    if (accountId <= 0) continue;
+
+    const input = normalizeTokenCount(item.input_tokens);
+    const output = normalizeTokenCount(item.output_tokens);
+    const cache = normalizeTokenCount(item.cache_tokens) ||
+      (normalizeTokenCount(item.cache_creation_tokens) + normalizeTokenCount(item.cache_read_tokens));
+    const tokens = normalizeTokenCount(item.total_tokens) || (input + output + cache);
+    const requests = item.requests != null
+      ? normalizeTokenCount(item.requests)
+      : (tokens > 0 ? 1 : 0);
+    const account = item.account && typeof item.account === 'object' ? item.account : {};
+    const name = String(
+      account.name || item.account_name || item.name || `账号 #${accountId}`
+    ).trim().slice(0, 160);
+    const platform = String(account.platform || item.platform || item.provider || '').trim().slice(0, 80);
+
+    const existing = byAccount.get(accountId);
+    if (existing) {
+      existing.requests += requests;
+      existing.input_tokens += input;
+      existing.output_tokens += output;
+      existing.cache_tokens += cache;
+      existing.total_tokens += tokens;
+      if (!existing.name || existing.name === `账号 #${accountId}`) existing.name = name;
+      if (!existing.platform && platform) existing.platform = platform;
+    } else {
+      byAccount.set(accountId, {
+        account_id: accountId,
+        name,
+        platform,
+        requests,
+        input_tokens: input,
+        output_tokens: output,
+        cache_tokens: cache,
+        total_tokens: tokens
+      });
+    }
+  }
+
+  return Array.from(byAccount.values())
+    .sort((a, b) => (b.total_tokens - a.total_tokens) ||
+      (b.requests - a.requests) ||
+      (a.account_id - b.account_id));
+}
+
+async function fetchAccountTokenRanking(db, range = 'day', date = null) {
+  const dates = resolveUserRankingDateRange(range, date);
+  const { url, key } = getSub2apiAdminCredentials(db);
+  if (!url || !key) {
+    throw clientError('尚未配置 Sub2API 服务地址或管理员 API Key', 503);
+  }
+
+  const baseUrl = normalizeUrl(url);
+  const rankingCacheKey = `account:${baseUrl}:${dates.granularity}:${dates.startDate}:${dates.endDate}`;
+  const cachedRanking = userRankingCache.get(rankingCacheKey);
+  if (cachedRanking && cachedRanking.expiresAt > Date.now()) {
+    return cachedRanking.value;
+  }
+
+  const allItems = [];
+  const pageSize = 200;
+  const maxPages = 20;
+  try {
+    for (let page = 1; page <= maxPages; page++) {
+      const res = await safeGet(`${baseUrl}/api/v1/admin/usage`, {
+        params: {
+          start_date: dates.startDate,
+          end_date: dates.endDate,
+          timezone: 'Asia/Shanghai',
+          page,
+          page_size: pageSize,
+          sort_by: 'created_at',
+          sort_order: 'desc',
+          exact_total: false
+        },
+        headers: getAuthHeaders(key),
+        timeout: 20000
+      });
+      const items = extractUsageItems(res.data);
+      allItems.push(...items);
+      if (items.length < pageSize) break;
+      const lastRawDate = items[items.length - 1] &&
+        (items[items.length - 1].created_at || items[items.length - 1].date);
+      if (lastRawDate && String(lastRawDate).slice(0, 10) < dates.startDate) break;
+    }
+  } catch (err) {
+    throw clientError(formatSub2apiError(err));
+  }
+
+  let earliestDate = null;
+  if (dates.granularity === 'all') {
+    earliestDate = await fetchSub2apiEarliestUsageDate(baseUrl, key, dates.endDate);
+  }
+  const effectiveStartDate = earliestDate && earliestDate <= dates.endDate
+    ? earliestDate
+    : dates.startDate;
+  const accounts = parseAccountUsageRanking(allItems, {
+    startDate: effectiveStartDate,
+    endDate: dates.endDate
+  });
+
+  const ranking = {
+    range: dates.range,
+    granularity: dates.granularity,
+    anchor_date: dates.anchorDate,
+    start_date: effectiveStartDate,
+    end_date: dates.endDate,
+    earliest_date: earliestDate && earliestDate <= dates.endDate ? earliestDate : null,
+    prev_date: dates.prevDate,
+    next_date: dates.nextDate,
+    is_current: dates.isCurrent,
+    today: dates.today,
+    account_count: accounts.length,
+    accounts
+  };
+
+  if (userRankingCache.size >= USER_RANKING_CACHE_LIMIT) {
+    const now = Date.now();
+    for (const [entryKey, entry] of userRankingCache.entries()) {
+      if (entry.expiresAt <= now) userRankingCache.delete(entryKey);
+    }
+    if (userRankingCache.size >= USER_RANKING_CACHE_LIMIT) {
+      const oldestKey = userRankingCache.keys().next().value;
+      if (oldestKey) userRankingCache.delete(oldestKey);
+    }
+  }
+  const ttl = dates.endDate < dates.today
+    ? USER_RANKING_HISTORICAL_CACHE_TTL_MS
+    : USER_RANKING_CACHE_TTL_MS;
+  userRankingCache.set(rankingCacheKey, {
+    value: ranking,
+    expiresAt: Date.now() + ttl
+  });
+  return ranking;
+}
+
 async function fetchTopUsersForAccount(baseUrl, apiKey, accountId) {
   try {
     const today = shanghaiDate(0);
@@ -1860,6 +2016,8 @@ module.exports = {
   syncTodayStatsForEnabledKeys,
   aggregateAccountTopUsers,
   syncTopUsersForAccounts,
+  parseAccountUsageRanking,
+  fetchAccountTokenRanking,
   resolveUserRankingDateRange,
   parseUserRanking,
   parseEarliestUsageDate,

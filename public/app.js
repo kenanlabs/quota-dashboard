@@ -19,6 +19,8 @@ function dashboardApp() {
         showUserRankingModal: false,
         userRankingLoading: false,
         userRankingError: '',
+        rankingType: 'user',
+        userRankingAccounts: [],
         userRankingUsers: [],
         userRankingMeta: null,
         userRankingRequestId: 0,
@@ -718,9 +720,11 @@ function dashboardApp() {
         openUserRanking() {
           const today = this.getShanghaiToday();
           this.userRankingToday = today;
-          if (!this.userRankingDate) this.userRankingDate = today;
+          this.userRankingDate = today;
+          this.userRankingGranularity = 'day';
           this.syncUserRankingPickerView();
           this.userRankingPickerOpen = false;
+          this.userRankingAccounts = [];
           this.userRankingUsers = [];
           this.userRankingMeta = null;
           this.userRankingError = '';
@@ -844,7 +848,10 @@ function dashboardApp() {
 
         get userRankingCountText() {
           if (!this.userRankingMeta) return '';
-          return `共 ${this.userRankingMeta.user_count} 位用户`;
+          const count = this.rankingType === 'account'
+            ? (this.userRankingMeta.account_count ?? 0)
+            : (this.userRankingMeta.user_count ?? 0);
+          return `共 ${count} ${this.rankingType === 'account' ? '个账号' : '位用户'}`;
         },
 
         get userRankingDatePrefix() {
@@ -881,20 +888,22 @@ function dashboardApp() {
           };
           const label = labels[this.userRankingSortBy] || '总 Token';
           const dir = this.userRankingSortDir === 'asc' ? '升序' : '降序';
-          return `全站用户 · 按${label}${dir} · 全部有记录用户`;
+          const subject = this.rankingType === 'account' ? '全站账号' : '全站用户';
+          return `${subject} · 按${label}${dir} · 全部有记录${this.rankingType === 'account' ? '账号' : '用户'}`;
         },
 
-        get sortedUserRankingUsers() {
-          if (!Array.isArray(this.userRankingUsers) || this.userRankingUsers.length === 0) return [];
+        get userRankingRows() {
+          const rows = this.rankingType === 'account' ? this.userRankingAccounts : this.userRankingUsers;
+          if (!Array.isArray(rows) || rows.length === 0) return [];
           const field = this.userRankingSortBy || 'total_tokens';
           const dir = this.userRankingSortDir === 'asc' ? 1 : -1;
-          return [...this.userRankingUsers].sort((a, b) => {
+          return [...rows].sort((a, b) => {
             const va = Number(a?.[field]) || 0;
             const vb = Number(b?.[field]) || 0;
             if (va !== vb) return (va - vb) * dir;
             const tie = (Number(b?.total_tokens) || 0) - (Number(a?.total_tokens) || 0);
             if (tie !== 0) return tie;
-            return (Number(a?.user_id) || 0) - (Number(b?.user_id) || 0);
+            return (Number(a?.user_id || a?.account_id) || 0) - (Number(b?.user_id || b?.account_id) || 0);
           });
         },
 
@@ -903,10 +912,17 @@ function dashboardApp() {
           if (this.userRankingGranularity === granularity) return;
           this.userRankingGranularity = granularity;
           this.userRankingPickerOpen = false;
-          if (!this.userRankingDate) {
-            this.userRankingDate = this.userRankingToday || this.getShanghaiToday();
-          }
+          this.userRankingDate = this.userRankingToday || this.getShanghaiToday();
           this.syncUserRankingPickerView();
+          this.fetchUserRanking();
+        },
+
+        setRankingType(type) {
+          if (!['user', 'account'].includes(type) || this.rankingType === type) return;
+          this.rankingType = type;
+          this.userRankingPickerOpen = false;
+          this.userRankingSortBy = 'total_tokens';
+          this.userRankingSortDir = 'desc';
           this.fetchUserRanking();
         },
 
@@ -1131,6 +1147,8 @@ function dashboardApp() {
           const requestId = ++this.userRankingRequestId;
           this.userRankingLoading = true;
           this.userRankingError = '';
+          this.userRankingUsers = [];
+          this.userRankingAccounts = [];
           try {
             const params = new URLSearchParams({
               granularity: this.userRankingGranularity || 'day'
@@ -1138,16 +1156,19 @@ function dashboardApp() {
             if (this.userRankingGranularity !== 'all' && this.userRankingDate) {
               params.set('date', this.userRankingDate);
             }
-            const res = await fetch(`/api/usage/user-ranking?${params.toString()}`, { credentials: 'same-origin' });
+            const endpoint = this.rankingType === 'account'
+              ? '/api/usage/account-ranking'
+              : '/api/usage/user-ranking';
+            const res = await fetch(`${endpoint}?${params.toString()}`, { credentials: 'same-origin' });
             const json = await res.json();
             if (requestId !== this.userRankingRequestId) return;
             if (!json.success) {
               this.userRankingError = json.error || '获取用户排行失败';
-              this.userRankingUsers = [];
               this.userRankingMeta = null;
               return;
             }
-            this.userRankingUsers = json.data?.users || [];
+            this.userRankingUsers = this.rankingType === 'user' ? (json.data?.users || []) : [];
+            this.userRankingAccounts = this.rankingType === 'account' ? (json.data?.accounts || []) : [];
             this.userRankingMeta = json.data || null;
             if (json.data?.today) {
               this.userRankingToday = json.data.today;
@@ -1159,6 +1180,7 @@ function dashboardApp() {
             if (requestId !== this.userRankingRequestId) return;
             this.userRankingError = '请求异常: ' + err.message;
             this.userRankingUsers = [];
+            this.userRankingAccounts = [];
             this.userRankingMeta = null;
           } finally {
             if (requestId === this.userRankingRequestId) {
